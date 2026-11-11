@@ -16,6 +16,86 @@ WORK = os.path.join(ROOT, "build")
 DIST = os.path.join(ROOT, "dist")
 NAME = "MC-Perf-Mods"
 ICON = os.path.join(ROOT, "assets", "icon.ico")
+NOTICES = os.path.join(ROOT, "THIRD-PARTY-NOTICES.txt")
+
+# Python packages that end up inside the exe (checked against PyInstaller's PYZ-00.toc after the build)
+BUNDLED = [
+    ("pywebview", "webview", "the window, drawn with HTML/CSS - BSD-3-Clause"),
+    ("pythonnet", "clr", ".NET bridge used by pywebview on Windows - MIT"),
+    ("clr_loader", "clr_loader", ".NET runtime loader - MIT"),
+    ("bottle", "bottle", "imported by pywebview - MIT"),
+    ("proxy_tools", "proxy_tools", "imported by pywebview - MIT"),
+    ("cffi", "cffi", "used by clr_loader - MIT"),
+    ("pycparser", "pycparser", "used by cffi - BSD-3-Clause"),
+    ("typing_extensions", "typing_extensions", "used by pywebview - PSF-2.0"),
+]
+# license texts that do not come with an installed package (saved in licenses/)
+EXTRA = [
+    ("Microsoft Edge WebView2 SDK (Microsoft.Web.WebView2.Core.dll, Microsoft.Web.WebView2.WinForms.dll)",
+     "microsoft-webview2.txt"),
+    ("Lucide icons (the line icons drawn in the window)", "lucide.txt"),
+]
+PROXY_TOOLS_MIT = """MIT License (stated in the package metadata; the package ships no license file)
+
+Copyright (c) Jonathan Tushman - https://github.com/jtushman/proxy_tools
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
+following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
+EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+
+
+def make_notices(toc_text):
+    """THIRD-PARTY-NOTICES.txt for everything inside the exe. Fails if a bundled package has no license."""
+    import importlib.metadata as md
+    bar = "=" * 78
+    out = ["THIRD-PARTY NOTICES - MC-Perf-Mods (Windows build)", "",
+           "MC-Perf-Mods itself is MIT licensed (see LICENSE). The Windows build bundles the software below;",
+           "each part keeps its own license, reproduced here as those licenses require.", "",
+           "Not bundled: Minecraft mods are downloaded by the user's computer straight from Modrinth and stay",
+           "under their authors' licenses. Fonts (Noto Sans Thai, Inter; SIL Open Font License) load from",
+           "Google Fonts at run time.", ""]
+    sections = []
+    py_lic = os.path.join(sys.base_prefix, "LICENSE.txt")
+    with open(py_lic, encoding="utf-8") as fh:
+        sections.append(("Python %d.%d.%d (python3*.dll, standard library, and the libraries the Windows build "
+                         "of Python ships: OpenSSL, libffi, Tcl/Tk, zlib, bzip2, xz, zstd, mpdecimal, expat, "
+                         "Microsoft Visual C++ runtime)" % sys.version_info[:3], fh.read()))
+    for dist_name, module, what in BUNDLED:
+        if "('%s'" % module not in toc_text and "('%s." % module not in toc_text:
+            continue                                  # not in this build
+        dist = md.distribution(dist_name)
+        texts = []
+        for f in dist.files or []:
+            if any(k in f.name.upper() for k in ("LICENSE", "COPYING", "NOTICE")):
+                texts.append(f.read_text(encoding="utf-8"))
+        if not texts and dist_name == "proxy_tools":
+            texts = [PROXY_TOOLS_MIT]
+        if not texts:
+            raise SystemExit("no license text found for bundled package %s" % dist_name)
+        sections.append(("%s %s - %s" % (dist_name, dist.version, what), "\n\n".join(texts)))
+    for title, fn in EXTRA:
+        with open(os.path.join(ROOT, "licenses", fn), encoding="utf-8") as fh:
+            sections.append((title, fh.read()))
+    sections.append(("PyInstaller bootloader (MC-Perf-Mods.exe launcher)",
+                     "GPL-2.0-or-later with the PyInstaller bootloader exception, which allows distributing the\n"
+                     "bootloader combined with any program under any license. https://pyinstaller.org/en/stable/license.html"))
+    out.append("Contents:")
+    out += ["  %d. %s" % (i + 1, t.split(" (")[0]) for i, (t, _) in enumerate(sections)]
+    for i, (t, body) in enumerate(sections):
+        out += ["", bar, "%d. %s" % (i + 1, t), bar, "", body.replace("\r\n", "\n").strip()]
+    return "\n".join(out) + "\n"
 
 README_TXT = """MC-Perf-Mods · ลงม็อดเพิ่มความลื่นให้ Minecraft
 =================================================
@@ -41,7 +121,22 @@ README_TXT = """MC-Perf-Mods · ลงม็อดเพิ่มความล
 
 ห้ามย้าย MC-Perf-Mods.exe ออกจากโฟลเดอร์นี้ เพราะต้องใช้ไฟล์ในโฟลเดอร์ _internal
 อยากเปลี่ยนพื้นหลัง กดปุ่ม "พื้นหลัง" มุมขวาบนของโปรแกรม แล้วเลือกรูปหรือวิดีโอได้เลย
+
+ลิขสิทธิ์
+- MC-Perf-Mods ใช้สัญญาอนุญาต MIT (ไฟล์ LICENSE.txt) ใช้ฟรี แจกต่อได้ ไม่มีการรับประกันใดๆ
+- โปรแกรมนี้รวมซอฟต์แวร์ของผู้อื่นไว้ด้วย รายละเอียดสัญญาอยู่ในไฟล์ THIRD-PARTY-NOTICES.txt
+- โปรแกรมไม่ได้แจกไฟล์ม็อด ม็อดทุกตัวโหลดตรงจาก Modrinth และเป็นลิขสิทธิ์ของผู้ทำม็อดแต่ละคน
+- NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+  ไม่ใช่โปรแกรมทางการของ Minecraft ไม่ได้รับการรับรองหรือเกี่ยวข้องกับ Mojang หรือ Microsoft
+
+เวอร์ชัน %s · https://github.com/NoNgNoN777/mc-perf-mods
 """
+
+
+def version():
+    sys.path.insert(0, SCRIPTS)
+    import perf
+    return perf.VERSION
 
 
 def make_icon():
@@ -77,12 +172,22 @@ def main():
            "--paths", SCRIPTS, "--hidden-import", "perf", "--hidden-import", "perf_gui",
            # not used by the program, only pulled in because they are installed here (-50 MB)
            "--exclude-module", "numpy", "--exclude-module", "PIL", "--exclude-module", "cryptography",
+           "--exclude-module", "setuptools", "--exclude-module", "pkg_resources",
            "--distpath", DIST, "--workpath", os.path.join(WORK, "work"), "--specpath", WORK,
            os.path.join(SCRIPTS, "perf_web.py")]
     subprocess.run(cmd, check=True)
     out = os.path.join(DIST, NAME)
+    with open(os.path.join(WORK, "work", NAME, "PYZ-00.toc"), encoding="utf-8") as fh:
+        notices = make_notices(fh.read())
+    with open(NOTICES, "w", encoding="utf-8", newline="\n") as f:      # copy kept in the repo
+        f.write(notices)
+    with open(os.path.join(out, "THIRD-PARTY-NOTICES.txt"), "w", encoding="utf-8-sig", newline="\r\n") as f:
+        f.write(notices)
+    with open(os.path.join(ROOT, "LICENSE"), encoding="utf-8") as fh, \
+            open(os.path.join(out, "LICENSE.txt"), "w", encoding="utf-8-sig", newline="\r\n") as f:
+        f.write(fh.read())
     with open(os.path.join(out, "อ่านก่อน.txt"), "w", encoding="utf-8-sig", newline="\r\n") as f:
-        f.write(README_TXT)
+        f.write(README_TXT % version())
     zpath = os.path.join(DIST, NAME + ".zip")
     if os.path.exists(zpath):
         os.remove(zpath)

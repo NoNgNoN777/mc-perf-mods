@@ -30,7 +30,8 @@ except Exception:
     pass
 
 API = "https://api.modrinth.com/v2"
-HEADERS = {"User-Agent": "NoNgNoN777/mc-perf-mods/1.0"}
+VERSION = "1.2"
+HEADERS = {"User-Agent": "NoNgNoN777/mc-perf-mods/" + VERSION + " (github.com/NoNgNoN777/mc-perf-mods)"}
 STATE_DIR = ".mc-perf-mods"
 
 # slug -> (role, mod ids that mean "already have this or an equivalent")

@@ -268,7 +268,7 @@ class App(tk.Tk):
         row1.pack(fill="x", padx=20, pady=(14, 4))
         tk.Label(row1, text="●", bg=C["panel"], fg=C["accent"], font=(FONT, 14)).pack(side="left")
         tk.Label(row1, text=" ลงม็อดเพิ่มความลื่น", bg=C["panel"], fg=C["text"], font=(FONT, 16, "bold")).pack(side="left")
-        tk.Label(row1, text="   เลือกไฟล์ที่ตรงกับเวอร์ชันเกมให้อัตโนมัติ · ไม่แตะม็อดเดิม · ย้อนกลับได้ทุกเมื่อ", bg=C["panel"],
+        tk.Label(row1, text="   เลือกไฟล์ที่ตรงกับเวอร์ชันเกมให้อัตโนมัติ · ไม่ใช่โปรแกรมทางการของ Minecraft (not an official Minecraft product)", bg=C["panel"],
                  fg=C["dim"], font=(FONT, 9)).pack(side="left", pady=(6, 0))
         row2 = tk.Frame(head, bg=C["panel"])
         row2.pack(fill="x", padx=20, pady=(6, 14))

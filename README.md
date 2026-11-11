@@ -10,11 +10,15 @@
 
 ไฟล์ม็อดทั้งหมดโหลดจาก [Modrinth](https://modrinth.com) และเช็คความถูกต้องของไฟล์ทุกครั้งก่อนลง
 
+> ไม่ใช่โปรแกรมทางการของ Minecraft · NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.
+
 ---
 
 ## ดาวน์โหลด
 
-โหลดไฟล์ **`MC-Perf-Mods.zip`** แล้วแตกไฟล์ไว้ที่ไหนก็ได้ **ไม่ต้องติดตั้งอะไรเพิ่ม**
+**[⬇ โหลด MC-Perf-Mods.zip](https://github.com/NoNgNoN777/mc-perf-mods/releases/latest/download/MC-Perf-Mods.zip)** · [ดูทุกเวอร์ชัน](https://github.com/NoNgNoN777/mc-perf-mods/releases)
+
+แตกไฟล์ไว้ที่ไหนก็ได้ แล้วเปิด `MC-Perf-Mods.exe` **ไม่ต้องติดตั้งอะไรเพิ่ม**
 ใช้ได้กับ Windows 10 และ 11 ต้องต่ออินเทอร์เน็ตตอนใช้งาน เพราะโปรแกรมต้องโหลดม็อด
 
 **เปิดครั้งแรกแล้ว Windows ขึ้นว่า "Windows protected your PC"**
@@ -198,3 +202,16 @@ python scripts/perf.py versions --loader forge                           ดู�
 | `--no-essential` | ไม่ลง Essential |
 | `--mc 1.21.1 --loader neoforge` | กำหนดเวอร์ชันเกมและ loader เอง |
 | `--out <โฟลเดอร์>` | โหลดม็อดเก็บไว้ที่อื่น โดยไม่ลงในม็อดแพ็ก |
+
+---
+
+## ลิขสิทธิ์และข้อตกลง
+
+- **MC-Perf-Mods** ใช้สัญญาอนุญาต [MIT](LICENSE) ใช้ฟรี แก้ไขและแจกต่อได้ โดยไม่มีการรับประกันใดๆ ใช้ตามความเสี่ยงของผู้ใช้
+- **ไม่ได้แจกไฟล์ม็อด** ไฟล์ม็อดไม่ได้อยู่ใน repo หรือใน zip เครื่องของผู้ใช้โหลดตรงจาก Modrinth ผ่าน [Modrinth API](https://docs.modrinth.com)
+  ม็อดแต่ละตัวเป็นลิขสิทธิ์และอยู่ภายใต้สัญญาอนุญาตของผู้ทำม็อดเอง ชื่อและไอคอนม็อดเป็นของผู้ทำม็อด
+- **ซอฟต์แวร์ของผู้อื่นใน exe** (Python, pywebview, pythonnet, Microsoft WebView2 SDK, ไอคอน Lucide ฯลฯ)
+  ดูสัญญาอนุญาตทั้งหมดได้ที่ [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) ซึ่งแนบไปใน zip ด้วย
+- **ฟอนต์** Noto Sans Thai และ Inter (SIL Open Font License) โหลดจาก Google Fonts ตอนเปิดโปรแกรม
+- **NOT AN OFFICIAL MINECRAFT PRODUCT. NOT APPROVED BY OR ASSOCIATED WITH MOJANG OR MICROSOFT.**
+  ไม่ใช่โปรแกรมทางการของ Minecraft ไม่ได้รับการรับรองหรือเกี่ยวข้องกับ Mojang หรือ Microsoft

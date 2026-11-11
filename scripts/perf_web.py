@@ -100,10 +100,11 @@ class Api:
         dim = load_settings().get("dim", 0.6)
         # a folder dropped on the exe (or given on the command line) is checked right away
         given = next((a for a in sys.argv[1:] if not a.startswith("--") and os.path.isdir(a)), None)
+        base = {"bg": bg, "dim": dim, "version": perf.VERSION}
         if given:
-            return {"path": os.path.normpath(given), "auto": True, "bg": bg, "dim": dim}
+            return dict(base, path=os.path.normpath(given), auto=True)
         default = os.path.join(DEFAULT_ROOT, "__")
-        return {"path": default if os.path.isdir(default) else "", "auto": False, "bg": bg, "dim": dim}
+        return dict(base, path=default if os.path.isdir(default) else "", auto=False)
 
     # ---------------------------------------------------------------- background
     def pick_background(self):
