@@ -616,8 +616,10 @@ $("#bgbtn").onclick = () => {
   const reset = el("button", "btn", "ใช้พื้นหลังเริ่มต้น");
   pick.onclick = async () => {
     pick.disabled = true;
-    const res = await api().pick_background();
-    pick.disabled = false;
+    let res;
+    try { res = await api().pick_background(); }
+    catch (e) { res = {error: "เลือกไฟล์ไม่สำเร็จ: " + (e && e.message || e)}; }
+    finally { pick.disabled = false; }
     if (!res) return;
     if (res.error) { toast(res.error, "warn"); return; }
     applyBg(res.bg); showNow(); toast("✓ เปลี่ยนพื้นหลังแล้ว");

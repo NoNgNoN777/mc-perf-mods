@@ -112,8 +112,12 @@ class Api:
         kind = getattr(getattr(webview, "FileDialog", None), "OPEN", None)
         if kind is None:
             kind = webview.OPEN_DIALOG
-        types = ("รูปและวิดีโอ (%s)" % ";".join("*" + e for e in BG_EXTS),)
-        res = self._window.create_file_dialog(kind, file_types=types)
+        # pywebview only accepts [\w ] in the label - Thai vowel/tone marks are not \w, so keep it English
+        types = ("Images and videos (%s)" % ";".join("*" + e for e in BG_EXTS),)
+        try:
+            res = self._window.create_file_dialog(kind, file_types=types)
+        except Exception as ex:
+            return {"error": "เปิดหน้าต่างเลือกไฟล์ไม่ได้: %s" % ex}
         if not res:
             return None
         src = res[0] if isinstance(res, (list, tuple)) else res
