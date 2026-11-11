@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ลงม็อดเพิ่มความลื่น</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#120a1f; --bg2:#1a0f2e;
+  --glass:rgba(34,20,58,.62); --glass2:rgba(48,28,80,.72); --glass-hi:rgba(66,38,108,.78);
+  --line:rgba(214,170,255,.14); --line-hi:rgba(255,140,200,.45);
+  --text:#f6ecff; --muted:#c3add9; --dim:#8f7aa8;
+  --pink:#ff5fa8; --purple:#a35bff; --violet:#7c4dff;
+  --grad:linear-gradient(135deg,#ff5fa8 0%,#c45bff 55%,#7c4dff 100%);
+  --ok:#ff7cc0; --warn:#ffc078; --danger:#ff6b8b;
+  --r:16px; --r-sm:11px;
+  --font:"Inter","Noto Sans Thai","Leelawadee UI",system-ui,sans-serif;
+  --ease:cubic-bezier(.22,1,.36,1);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:15px/1.5 var(--font);overflow:hidden;
+  -webkit-font-smoothing:antialiased;user-select:none}
+button,input{font:inherit;color:inherit}
+
+/* ---------- moving background ---------- */
+#bg{position:fixed;inset:0;z-index:0;overflow:hidden;background:radial-gradient(120% 90% at 50% 0%,#2a1250 0%,var(--bg) 60%)}
+.blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.55;mix-blend-mode:screen;will-change:transform}
+.b1{width:560px;height:560px;background:#ff4fa0;left:-120px;top:-160px;animation:float1 22s var(--ease) infinite alternate}
+.b2{width:620px;height:620px;background:#8a3cff;right:-180px;top:10%;animation:float2 26s var(--ease) infinite alternate}
+.b3{width:480px;height:480px;background:#ff7ad9;left:30%;bottom:-220px;animation:float3 30s var(--ease) infinite alternate}
+.b4{width:360px;height:360px;background:#5b3cff;left:8%;bottom:10%;opacity:.4;animation:float2 34s var(--ease) infinite alternate-reverse}
+@keyframes float1{to{transform:translate(260px,180px) scale(1.25)}}
+@keyframes float2{to{transform:translate(-240px,160px) scale(.85)}}
+@keyframes float3{to{transform:translate(160px,-200px) scale(1.2)}}
+#stars{position:absolute;inset:0;width:100%;height:100%}
+#custom-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
+#bg.custom #custom-bg{display:block}
+#bg.custom .blob{opacity:.25}
+#bg::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(18,10,31,.15),rgba(18,10,31,.55))}
+#bg.custom::after{background:rgba(18,10,31,var(--bgdim,.6));transition:background .2s}
+.brand .bgbtn{margin-left:auto;height:40px;padding:0 16px;font-size:13.5px}
+.bgpanel{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+.bgpanel .now{padding:10px 14px;border-radius:12px;background:rgba(255,255,255,.05);color:var(--text);font-size:14px}
+.bgpanel .row{display:flex;gap:10px;flex-wrap:wrap}
+.bgpanel .btn{height:42px}
+.bgpanel label{display:flex;flex-direction:column;gap:8px;color:var(--text);font-size:14px}
+.bgpanel input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:6px;background:linear-gradient(90deg,#ff5fa8,#7c4dff);outline:none}
+.bgpanel input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;
+  box-shadow:0 2px 10px rgba(255,95,168,.8);cursor:pointer}
+.bgpanel .note{font-size:12.5px;color:var(--dim)}
+
+/* ---------- layout ---------- */
+#app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column}
+header{padding:22px 28px 16px}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:40px;height:40px;border-radius:12px;background:var(--grad);display:grid;place-items:center;
+  box-shadow:0 8px 30px -6px rgba(255,95,168,.7);animation:pulse 3.2s ease-in-out infinite}
+.logo svg{width:22px;height:22px}
+@keyframes pulse{50%{box-shadow:0 8px 40px -2px rgba(196,91,255,.85);transform:translateY(-1px)}}
+h1{margin:0;font-size:22px;font-weight:700;letter-spacing:.2px;
+  background:linear-gradient(90deg,#fff,#ffd1ea 50%,#e3c8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{color:var(--muted);font-size:13px;margin-top:1px}
+.bar{display:flex;gap:10px;margin-top:16px}
+.field{flex:1;display:flex;align-items:center;gap:10px;background:var(--glass);border:1px solid var(--line);
+  border-radius:var(--r);padding:0 16px;height:48px;backdrop-filter:blur(14px);transition:border-color .25s,box-shadow .25s}
+.field:focus-within{border-color:var(--line-hi);box-shadow:0 0 0 4px rgba(255,95,168,.14)}
+.field svg{width:18px;height:18px;flex:none;opacity:.7}
+.field input{flex:1;background:none;border:0;outline:0;font-size:14.5px;user-select:text}
+.field input::placeholder{color:var(--dim)}
+
+.btn{height:48px;padding:0 22px;border-radius:var(--r);border:1px solid var(--line);background:var(--glass2);
+  backdrop-filter:blur(14px);cursor:pointer;font-weight:600;font-size:14px;display:inline-flex;align-items:center;gap:8px;
+  transition:transform .2s var(--ease),background .2s,border-color .2s,box-shadow .25s,opacity .2s;white-space:nowrap}
+.btn:hover{background:var(--glass-hi);border-color:var(--line-hi);transform:translateY(-2px)}
+.btn:active{transform:translateY(0) scale(.97)}
+.btn svg{width:17px;height:17px}
+.btn.primary{background:var(--grad);border-color:transparent;color:#fff;box-shadow:0 10px 30px -10px rgba(255,95,168,.8);
+  background-size:180% 180%;animation:sheen 6s ease infinite}
+.btn.primary:hover{box-shadow:0 14px 40px -8px rgba(196,91,255,.9)}
+@keyframes sheen{50%{background-position:100% 50%}}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none}
+.btn.big{height:54px;padding:0 30px;font-size:15.5px;border-radius:18px}
+
+.toolbar{display:flex;align-items:center;gap:14px;padding:4px 28px 12px}
+.status{flex:1;font-size:14px;color:var(--muted);display:flex;align-items:center;gap:10px;min-width:0}
+.status b{color:var(--text);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:999px;background:var(--glass2);
+  border:1px solid var(--line);font-size:12.5px;color:var(--text);font-weight:600}
+.chip i{width:7px;height:7px;border-radius:50%;background:var(--pink);box-shadow:0 0 10px var(--pink)}
+.search{width:300px;height:42px}
+
+main{flex:1;overflow-y:auto;padding:0 22px 24px 28px;scroll-behavior:smooth}
+.dialog .body{padding-right:6px}
+main::-webkit-scrollbar,.dialog .body::-webkit-scrollbar,#log::-webkit-scrollbar{width:10px}
+.dialog .body::-webkit-scrollbar-thumb,#log::-webkit-scrollbar-thumb{background:rgba(214,170,255,.22);border-radius:10px;border:3px solid transparent;background-clip:padding-box}
+main::-webkit-scrollbar-thumb{background:rgba(214,170,255,.22);border-radius:10px;border:3px solid transparent;background-clip:padding-box}
+main::-webkit-scrollbar-thumb:hover{background-color:rgba(255,140,200,.4)}
+
+/* ---------- sections ---------- */
+.section{margin-top:18px;animation:rise .5s var(--ease) both}
+.section.sub{margin:10px 0 0 6px}
+.shead{display:flex;align-items:center;gap:12px;cursor:pointer;padding:6px 4px;border-radius:12px;transition:background .2s}
+.shead:hover{background:rgba(255,255,255,.035)}
+.arrow{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--glass2);border:1px solid var(--line);
+  transition:transform .35s var(--ease)}
+.arrow svg{width:14px;height:14px}
+.section.closed > .shead .arrow{transform:rotate(-90deg)}
+.stitle{font-size:18px;font-weight:700}
+.section.sub .stitle{font-size:15px;font-weight:600;color:#f0dcff}
+.section.sub .arrow{width:22px;height:22px;border-radius:7px}
+.count{font-size:12.5px;font-weight:700;padding:3px 11px;border-radius:999px;background:var(--glass2);border:1px solid var(--line);
+  color:var(--muted);transition:all .3s}
+.count.on{background:linear-gradient(135deg,rgba(255,95,168,.25),rgba(124,77,255,.25));border-color:rgba(255,95,168,.45);color:#ffd3ec}
+.hint{font-size:13px;color:var(--dim)}
+.sactions{margin-left:auto;display:flex;gap:6px}
+.link-btn{background:none;border:0;cursor:pointer;color:#ffa3d4;font-size:13px;font-weight:600;padding:6px 10px;border-radius:9px;transition:background .2s,color .2s}
+.link-btn:hover{background:rgba(255,95,168,.12);color:#fff}
+.sbody{display:grid;grid-template-rows:1fr;transition:grid-template-rows .45s var(--ease),opacity .35s}
+.sbody > .inner{overflow:hidden;min-height:0;padding:2px 2px 2px 14px}
+.section.closed > .sbody{grid-template-rows:0fr;opacity:0}
+.hidden{display:none!important}
+
+/* ---------- mod cards ---------- */
+.card{display:flex;align-items:center;gap:14px;margin-top:9px;padding:13px 16px;border-radius:var(--r);
+  background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(16px);cursor:pointer;position:relative;
+  transition:transform .25s var(--ease),background .25s,border-color .25s,box-shadow .3s;animation:rise .45s var(--ease) both}
+.card:hover{transform:translateY(-2px);background:var(--glass2);border-color:rgba(255,140,200,.3);box-shadow:0 12px 30px -16px rgba(255,95,168,.55)}
+.card.on{border-color:rgba(255,95,168,.42);background:linear-gradient(135deg,rgba(255,95,168,.13),rgba(124,77,255,.12)),var(--glass)}
+.card.auto{cursor:default}
+.card.skip{cursor:default;opacity:.85}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+
+.check{width:30px;height:30px;flex:none;border-radius:10px;border:2px solid rgba(214,170,255,.35);background:rgba(255,255,255,.03);
+  display:grid;place-items:center;transition:all .3s var(--ease)}
+.check svg{width:18px;height:18px;stroke:#fff;stroke-width:3.2;fill:none;stroke-linecap:round;stroke-linejoin:round;
+  stroke-dasharray:24;stroke-dashoffset:24;transition:stroke-dashoffset .35s var(--ease) .05s}
+.card:hover .check{border-color:rgba(255,140,200,.7)}
+.card.on .check{background:var(--grad);border-color:transparent;box-shadow:0 6px 18px -4px rgba(255,95,168,.75);animation:pop .35s var(--ease)}
+.card.on .check svg{stroke-dashoffset:0}
+.card.auto .check{opacity:.7}
+@keyframes pop{40%{transform:scale(1.18)}}
+
+.icon{width:46px;height:46px;flex:none;border-radius:12px;background:rgba(255,255,255,.06);display:grid;place-items:center;
+  overflow:hidden;font-weight:700;color:var(--muted);font-size:14px;border:1px solid var(--line)}
+.icon img{width:100%;height:100%;object-fit:cover}
+.meta{flex:1;min-width:0}
+.title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.name{font-weight:650;font-size:15.5px}
+.ver{font-size:12px;color:var(--dim);font-family:"Inter",monospace}
+.pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(255,255,255,.08);color:var(--muted)}
+.pill.beta{background:rgba(255,192,120,.16);color:var(--warn)}
+.side{font-size:11.5px;font-weight:700;padding:2px 10px 2px 8px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;cursor:help;
+  border:1px solid transparent}
+.side i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.side.both{background:rgba(255,95,168,.18);color:#ff9fd0;border-color:rgba(255,95,168,.4)}
+.side.server{background:rgba(255,192,120,.15);color:var(--warn);border-color:rgba(255,192,120,.35)}
+.side.client,.side.either{background:rgba(120,220,170,.12);color:#8ee6b8;border-color:rgba(120,220,170,.28)}
+.side.unknown{background:rgba(255,255,255,.07);color:var(--dim)}
+#friends{display:none}
+#friends.show{display:inline-flex}
+.desc{color:var(--muted);font-size:13.5px;margin-top:2px}
+.rel{font-size:12.5px;color:var(--dim);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 14px}
+.rel .bad{color:var(--danger);font-weight:600}
+.rel .use{color:#ffb3dc}
+.right{display:flex;align-items:center;gap:6px;flex:none}
+.dl{font-size:12.5px;color:var(--dim);display:flex;align-items:center;gap:4px;margin-right:6px}
+.dl svg{width:14px;height:14px}
+.ext{font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.04);
+  cursor:pointer;color:#e7d4ff;transition:all .2s}
+.ext:hover{background:rgba(255,95,168,.16);border-color:rgba(255,95,168,.45);color:#fff}
+
+/* skeleton while checking */
+.skel{height:72px;border-radius:var(--r);margin-top:9px;background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.09) 50%,rgba(255,255,255,.04) 75%);
+  background-size:200% 100%;animation:shimmer 1.4s linear infinite;border:1px solid var(--line)}
+@keyframes shimmer{to{background-position:-200% 0}}
+.empty{margin:70px auto;text-align:center;color:var(--muted);max-width:460px}
+.empty .big-ico{width:84px;height:84px;margin:0 auto 18px;border-radius:26px;background:var(--grad);display:grid;place-items:center;
+  box-shadow:0 20px 60px -15px rgba(255,95,168,.8);animation:bob 4s ease-in-out infinite}
+.empty .big-ico svg{width:40px;height:40px}
+@keyframes bob{50%{transform:translateY(-8px) rotate(-3deg)}}
+.empty h2{color:var(--text);font-size:20px;margin:0 0 6px}
+
+/* ---------- footer ---------- */
+footer{display:flex;align-items:center;gap:12px;padding:14px 28px;background:rgba(20,11,36,.72);backdrop-filter:blur(18px);
+  border-top:1px solid var(--line)}
+.total{font-weight:700;font-size:15px;margin-left:auto;margin-right:6px}
+.total span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;font-size:19px}
+#log{display:none;margin:0 28px 0;max-height:170px;overflow:auto;background:rgba(10,5,20,.8);border:1px solid var(--line);border-bottom:0;
+  border-radius:14px 14px 0 0;padding:10px 14px;font:12.5px/1.6 Consolas,monospace;color:#e6d6ff;white-space:pre-wrap;user-select:text}
+#log.show{display:block;animation:rise .3s var(--ease)}
+
+/* ---------- toast & modal ---------- */
+#toasts{position:fixed;right:28px;bottom:100px;z-index:20;display:flex;flex-direction:column;gap:8px;align-items:flex-end;pointer-events:none}
+.toast{padding:11px 18px;border-radius:14px;background:rgba(40,22,70,.92);border:1px solid var(--line-hi);backdrop-filter:blur(16px);
+  font-size:14px;box-shadow:0 16px 40px -14px rgba(0,0,0,.7);animation:toastIn .4s var(--ease) both;max-width:520px}
+.toast.warn{border-color:rgba(255,192,120,.55)}
+.toast.out{animation:toastOut .35s var(--ease) forwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(16px) scale(.96)}}
+@keyframes toastOut{to{opacity:0;transform:translateY(10px) scale(.96)}}
+#modal{position:fixed;inset:0;z-index:30;display:none;place-items:center;background:rgba(8,4,16,.55);backdrop-filter:blur(6px)}
+#modal.show{display:grid;animation:fade .25s ease}
+@keyframes fade{from{opacity:0}}
+.dialog{width:min(560px,92vw);max-height:80vh;display:flex;flex-direction:column;background:rgba(36,20,62,.96);border:1px solid var(--line-hi);
+  border-radius:22px;padding:24px;box-shadow:0 30px 80px -20px rgba(0,0,0,.8),0 0 0 1px rgba(255,255,255,.03) inset;animation:dlg .4s var(--ease)}
+@keyframes dlg{from{opacity:0;transform:translateY(20px) scale(.96)}}
+.dialog h3{margin:0 0 8px;font-size:19px}
+.dialog .body{color:var(--muted);font-size:14.5px;overflow:auto}
+.dialog ul{margin:10px 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.dialog li{padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.05);color:var(--text)}
+.dialog li.pick{cursor:pointer;border:1px solid transparent;transition:all .2s}
+.dialog li.pick:hover{border-color:rgba(255,95,168,.4)}
+.dialog li.pick.sel{background:linear-gradient(135deg,rgba(255,95,168,.22),rgba(124,77,255,.2));border-color:rgba(255,95,168,.6)}
+.dialog li small{display:block;color:var(--dim);font-size:12px}
+.dialog .acts{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+.dialog .btn{height:44px}
+.spin{width:18px;height:18px;border-radius:50%;border:2.5px solid rgba(255,255,255,.35);border-top-color:#fff;animation:rot .8s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="bg">
+  <img id="custom-bg" alt=""><video id="custom-video" autoplay muted loop playsinline style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover"></video>
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
+  <canvas id="stars"></canvas>
+</div>
+
+<div id="app">
+  <header>
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+      <div><h1>ลงม็อดเพิ่มความลื่น</h1><div class="sub">เลือกไฟล์ที่ตรงกับเวอร์ชันเกมให้อัตโนมัติ · ไม่แตะม็อดเดิม · ย้อนกลับได้ทุกเมื่อ</div></div>
+      <button class="btn bgbtn" id="bgbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>พื้นหลัง</button>
+    </div>
+    <div class="bar">
+      <label class="field"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        <input id="path" placeholder="วางที่อยู่โฟลเดอร์ม็อดแพ็ก หรือกด เลือกโฟลเดอร์" spellcheck="false"></label>
+      <button class="btn" id="browse">เลือกโฟลเดอร์</button>
+      <button class="btn primary" id="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>ตรวจม็อดแพ็ก</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <div class="status" id="status">เลือกโฟลเดอร์ม็อดแพ็ก แล้วกด <b>ตรวจม็อดแพ็ก</b></div>
+    <label class="field search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" placeholder="ค้นหาม็อด เช่น แผนที่ หรือ jei" spellcheck="false"></label>
+  </div>
+
+  <main id="list">
+    <div class="empty"><div class="big-ico"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+      <h2>เริ่มกันเลย</h2>เลือกโฟลเดอร์ม็อดแพ็ก (โฟลเดอร์ที่มี mods อยู่ข้างใน) แล้วกด ตรวจม็อดแพ็ก<br>โปรแกรมจะคัดม็อดที่เข้ากับเวอร์ชันเกมมาให้เลือก</div>
+  </main>
+
+  <pre id="log"></pre>
+  <footer>
+    <button class="btn" id="restore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>ย้อนการติดตั้ง</button>
+    <button class="btn" id="logbtn">ดูบันทึก</button>
+    <button class="btn" id="friends"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2a5 5 0 0 1 5.5 5.3"/></svg><span></span></button>
+    <div class="total" id="total"></div>
+    <button class="btn primary big" id="install" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-5-5m5 5 5-5"/><path d="M5 21h14"/></svg>ติดตั้งที่เลือกไว้</button>
+  </footer>
+</div>
+
+<div id="toasts"></div>
+<div id="modal"><div class="dialog"><h3 id="m-title"></h3><div class="body" id="m-body"></div><div class="acts" id="m-acts"></div></div></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const svg = html => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };
+const CHECK = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+const DL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M5 20h14"/></svg>';
+
+/* ---------------- background: drifting sparkles ---------------- */
+(function stars(){
+  const cv = $("#stars"), cx = cv.getContext("2d"); let W, H, P = [];
+  const size = () => { W = cv.width = innerWidth * devicePixelRatio; H = cv.height = innerHeight * devicePixelRatio; };
+  size(); addEventListener("resize", size);
+  for (let i = 0; i < 70; i++) P.push({x: Math.random(), y: Math.random(), r: Math.random() * 1.8 + .4, s: Math.random() * .00025 + .00008,
+    a: Math.random() * Math.PI * 2, hue: Math.random() < .5 ? "255,120,200" : "190,140,255"});
+  (function tick(){
+    cx.clearRect(0, 0, W, H);
+    for (const p of P) {
+      p.y -= p.s; p.a += .02; if (p.y < -.02) { p.y = 1.02; p.x = Math.random(); }
+      const tw = .45 + .55 * Math.abs(Math.sin(p.a));
+      cx.beginPath(); cx.arc((p.x + Math.sin(p.a * .3) * .006) * W, p.y * H, p.r * devicePixelRatio, 0, 7);
+      cx.fillStyle = `rgba(${p.hue},${.75 * tw})`; cx.shadowBlur = 12 * devicePixelRatio; cx.shadowColor = `rgba(${p.hue},.9)`; cx.fill();
+    }
+    requestAnimationFrame(tick);
+  })();
+})();
+
+/* ---------------- state ---------------- */
+const S = { data: null, by: {}, needed: {}, on: new Set(), auto: new Set(), rows: [], sections: [], busy: false };
+const api = () => window.pywebview.api;
+const title = slug => (S.by[slug] && S.by[slug].title) || slug;
+
+function toast(msg, kind) {
+  const t = el("div", "toast" + (kind ? " " + kind : ""), msg); $("#toasts").append(t);
+  while ($("#toasts").children.length > 3) $("#toasts").firstChild.remove();
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 400); }, 3200);
+}
+function modal(titleText, body, actions) {
+  return new Promise(res => {
+    $("#m-title").textContent = titleText; const b = $("#m-body"); b.replaceChildren();
+    if (typeof body === "string") b.textContent = body; else b.append(...[].concat(body));
+    const a = $("#m-acts"); a.replaceChildren();
+    for (const [label, val, primary] of actions) {
+      const btn = el("button", "btn" + (primary ? " primary" : ""), label);
+      btn.onclick = () => { $("#modal").classList.remove("show"); res(val); }; a.append(btn);
+    }
+    $("#modal").classList.add("show");
+  });
+}
+const list = items => { const ul = el("ul"); for (const i of items) ul.append(el("li", null, i)); return ul; };
+function setBusy(on, msg) {
+  S.busy = on; for (const id of ["#check", "#browse", "#restore"]) $(id).disabled = on;
+  $("#install").disabled = on || !S.data || !S.data.plan.length;
+  if (msg) setStatus(msg);
+}
+function setStatus(msg, chip) {
+  const s = $("#status"); s.replaceChildren();
+  if (chip) { const c = el("span", "chip"); c.append(el("i"), document.createTextNode(chip)); s.append(c); }
+  s.append(document.createTextNode(msg));
+}
+window.onLog = line => { const l = $("#log"); l.classList.add("show"); l.textContent += line + "\n"; l.scrollTop = l.scrollHeight; };
+
+/* ---------------- dependency logic ---------------- */
+function requiresAll(slug) {
+  const out = new Set(), todo = [slug];
+  while (todo.length) for (const n of (S.by[todo.pop()] || {requires: []}).requires)
+    if (S.by[n] && !out.has(n)) { out.add(n); todo.push(n); }
+  return out;
+}
+function dependentsAll(slug, among) {
+  const out = new Set(), todo = [slug];
+  while (todo.length) for (const u of S.needed[todo.pop()] || [])
+    if (among.has(u) && !out.has(u)) { out.add(u); todo.push(u); }
+  return out;
+}
+function syncAuto() {               // libraries follow the mods that need them
+  const want = new Set([...S.on].filter(s => !S.auto.has(s)));
+  for (const s of [...want]) requiresAll(s).forEach(x => want.add(x));
+  for (const s of S.auto) want.has(s) ? S.on.add(s) : S.on.delete(s);
+}
+
+async function toggle(slug) {
+  if (S.busy) return;
+  if (S.auto.has(slug)) {
+    const users = (S.needed[slug] || []).filter(u => S.on.has(u)).map(title);
+    toast(users.length ? `${title(slug)} ถูกเลือกให้อัตโนมัติ เพราะ ${users.join(", ")} ต้องใช้` : `${title(slug)} จะถูกเลือกให้เองเมื่อเลือกม็อดที่ต้องใช้`);
+    return;
+  }
+  if (!S.on.has(slug)) {
+    const added = [...requiresAll(slug)].filter(s => !S.on.has(s));
+    S.on.add(slug); added.forEach(s => S.on.add(s)); refresh();
+    toast(added.length ? `✓ เลือก ${title(slug)} แล้ว พร้อมเลือก ${added.map(title).join(", ")} ที่ต้องใช้คู่กันให้ด้วย` : `✓ เลือก ${title(slug)} แล้ว`);
+    return;
+  }
+  const users = [...dependentsAll(slug, S.on)].filter(u => !S.auto.has(u));
+  if (users.length) {
+    const ok = await modal(`${title(slug)} จำเป็นต่อม็อดอื่น`,
+      [el("div", null, `ถ้าเอา ${title(slug)} ออก ม็อดต่อไปนี้จะทำงานไม่ได้ และอาจทำให้เกมเปิดไม่ขึ้น`), list(users.map(title))],
+      [[`เก็บ ${title(slug)} ไว้`, false], ["เอาออกทั้งหมด", true, true]]);
+    if (!ok) { toast(`ยังเก็บ ${title(slug)} ไว้ เพราะ ${users.map(title).join(", ")} ต้องใช้`, "warn"); return; }
+    users.forEach(u => S.on.delete(u));
+  }
+  S.on.delete(slug); refresh();
+  toast(users.length ? `เอา ${title(slug)} ออกแล้ว พร้อมกับ ${users.map(title).join(", ")}` : `เอา ${title(slug)} ออกแล้ว`, users.length ? "warn" : null);
+}
+
+function tickSection(sec, value) {
+  const slugs = sec.rows().filter(s => S.by[s] && !S.auto.has(s));
+  if (value) {
+    for (const s of slugs) { S.on.add(s); requiresAll(s).forEach(x => S.on.add(x)); }
+    refresh(); toast(`✓ เลือกทั้งหมดในหมวด ${sec.name} แล้ว (รวมม็อดที่ต้องใช้คู่กัน)`); return;
+  }
+  const inSec = new Set(slugs), outside = new Set([...S.on].filter(s => !inSec.has(s)));
+  const keep = slugs.filter(s => [...dependentsAll(s, outside)].some(u => !inSec.has(u)));
+  slugs.forEach(s => { if (!keep.includes(s)) S.on.delete(s); });
+  refresh();
+  keep.length ? toast(`ยังเก็บ ${keep.map(title).join(", ")} ไว้ เพราะม็อดที่เลือกในหมวดอื่นต้องใช้`, "warn") : toast(`ยกเลิกการเลือกทั้งหมดในหมวด ${sec.name} แล้ว`);
+}
+
+function refresh() {
+  syncAuto();
+  for (const r of S.rows) {
+    if (!r.p) continue;
+    r.card.classList.toggle("on", S.on.has(r.slug));
+    const rel = r.rel; rel.replaceChildren();
+    const missing = r.p.requires.filter(s => S.by[s] && !S.on.has(s));
+    if (S.on.has(r.slug) && missing.length) rel.append(el("span", "bad", "⚠ ยังขาด: " + missing.map(title).join(", ")));
+    else if (r.p.requires.length) rel.append(el("span", null, "ต้องใช้คู่กับ: " + r.p.requires.map(title).join(", ")));
+    const users = (S.needed[r.slug] || []).filter(u => S.on.has(u)).map(title);
+    if (users.length) rel.append(el("span", "use", "จำเป็นสำหรับ: " + users.join(", ")));
+  }
+  for (const sec of S.sections) {
+    const rows = sec.rows(), tickable = rows.filter(s => S.by[s]);
+    const n = tickable.filter(s => S.on.has(s)).length;
+    sec.count.textContent = tickable.length ? `${n} / ${tickable.length}` : `${rows.length} รายการ`;
+    sec.count.classList.toggle("on", n > 0);
+  }
+  const n = S.on.size;
+  $("#total").innerHTML = n ? `เลือกไว้ <span>${n}</span> ไฟล์` : "";
+  const shared = [...S.on].filter(s => ["both", "server"].includes(S.by[s].side));
+  $("#friends").classList.toggle("show", n > 0);
+  $("#friends span").textContent = shared.length ? `เพื่อนต้องลงตาม ${shared.length} ม็อด` : "เพื่อนไม่ต้องลงตาม";
+  $("#install").disabled = S.busy || !n;
+}
+
+/* ---------------- rendering ---------------- */
+function when(tag) { const m = /^(\d{4})(\d\d)(\d\d)-(\d\d)(\d\d)/.exec(tag || "");
+  return m ? `${+m[3]}/${+m[2]}/${m[1]} เวลา ${m[4]}:${m[5]} น.` : tag; }
+/* who needs the mod when friends join through Essential: [label, tooltip] */
+const SIDES = {
+  both: ["ทุกคนต้องลง", "client + server · เล่นกับเพื่อนผ่าน Essential ทั้งคนเปิดโลกและเพื่อนต้องมีม็อดนี้"],
+  server: ["เฉพาะคนเปิดโลก", "server · ทำงานในเกมของคนเปิดโลก เพื่อนไม่ต้องลง"],
+  client: ["เฉพาะเครื่องตัวเอง", "client · ช่วยเฉพาะเครื่องที่ลงไว้ เพื่อนไม่ต้องลงตาม"],
+  either: ["ลงฝั่งเดียวก็ได้", "client หรือ server · ใช้ได้แม้มีแค่บางคนที่ลง เพื่อนไม่ต้องลงตาม"],
+  unknown: ["ไม่ระบุฝั่ง", "ผู้ทำม็อดไม่ได้ระบุไว้ใน Modrinth ถ้าไม่แน่ใจให้เพื่อนลงด้วย"],
+};
+function fmt(n) { return !n ? "" : n >= 1e6 ? Math.floor(n / 1e6) + "M" : n >= 1e3 ? Math.floor(n / 1e3) + "K" : String(n); }
+
+function section(parent, name, hint, opts = {}) {
+  const sec = el("div", "section" + (opts.sub ? " sub" : "") + (opts.closed ? " closed" : ""));
+  const head = el("div", "shead"), arrow = el("div", "arrow"); arrow.append(svg(ARROW));
+  const count = el("span", "count");
+  head.append(arrow, el("span", "stitle", name), count);
+  if (hint) head.append(el("span", "hint", hint));
+  const obj = { el: sec, name, count, slugs: [], children: [], rows() { return this.slugs.concat(...this.children.map(c => c.rows())); } };
+  if (opts.actions) {
+    const acts = el("div", "sactions");
+    for (const [label, v] of [["เลือกทั้งหมด", true], ["ไม่เลือกทั้งหมด", false]]) {
+      const b = el("button", "link-btn", label); b.onclick = e => { e.stopPropagation(); tickSection(obj, v); }; acts.append(b);
+    }
+    head.append(acts);
+  }
+  head.onclick = () => sec.classList.toggle("closed");
+  const body = el("div", "sbody"), inner = el("div", "inner"); body.append(inner);
+  sec.append(head, body); parent.append(sec);
+  obj.body = inner; S.sections.push(obj);
+  return obj;
+}
+
+function card(sec, p, i, opts = {}) {
+  const c = el("div", "card" + (opts.auto ? " auto" : "") + (opts.skip ? " skip" : ""));
+  c.style.animationDelay = Math.min(i * 28, 500) + "ms";
+  const slug = p ? p.slug : opts.slug;
+  if (p) { const ck = el("div", "check"); ck.append(svg(CHECK)); c.append(ck); }
+  const ic = el("div", "icon", ((p && p.title) || slug).slice(0, 2).toUpperCase());
+  if (p && p.icon_url) {
+    const img = new Image(); img.alt = "";   // not lazy: the image is attached only after it loads
+    img.onload = () => { ic.textContent = ""; ic.append(img); }; img.src = p.icon_url;
+  }
+  c.append(ic);
+  const meta = el("div", "meta"), t = el("div", "title");
+  t.append(el("span", "name", (p && p.title) || slug));
+  if (p) {
+    t.append(el("span", "ver", p.version));
+    if (p.type !== "release") t.append(el("span", "pill beta", p.type));
+    if (opts.auto) t.append(el("span", "pill", "เลือกให้อัตโนมัติ"));
+    const sd = SIDES[p.side] || SIDES.unknown, b = el("span", "side " + (p.side || "unknown"));
+    b.append(el("i"), document.createTextNode(sd[0])); b.title = sd[1]; t.append(b);
+  }
+  const d = S.data;
+  meta.append(t, el("div", "desc", p ? (d.desc[slug] || d.what[p.role] || "ม็อดเสริมที่ม็อดอื่นต้องใช้") : opts.note));
+  const rel = el("div", "rel"); meta.append(rel); c.append(meta);
+  if (p) {
+    const right = el("div", "right");
+    if (p.downloads) { const dl = el("span", "dl"); dl.append(svg(DL), document.createTextNode(fmt(p.downloads))); right.append(dl); }
+    for (const [label, url] of [["Modrinth", p.page], ["CurseForge", p.curseforge]]) if (url) {
+      const b = el("button", "ext", label); b.onclick = e => { e.stopPropagation(); api().open_url(url); }; right.append(b);
+    }
+    c.append(right);
+    c.onclick = () => toggle(slug);
+  }
+  sec.body.append(c); sec.slugs.push(slug);
+  const text = [slug, p && p.title, d.desc[slug], opts.note, p && (SIDES[p.side] || SIDES.unknown)[0]].filter(Boolean).join(" ").toLowerCase();
+  S.rows.push({ slug, p, card: c, rel, text, sec });
+}
+
+function render(data) {
+  S.data = data; S.by = {}; S.needed = {}; S.on = new Set(); S.auto = new Set(); S.rows = []; S.sections = [];
+  for (const p of data.plan) { S.by[p.slug] = p; S.needed[p.slug] = []; }
+  for (const p of data.plan) for (const n of p.requires) if (S.needed[n]) S.needed[n].push(p.slug);
+  const root = $("#list"); root.replaceChildren();
+  const qol = new Set(data.qol);
+  const main = data.plan.filter(p => !p.optional), libs = data.plan.filter(p => p.optional && !qol.has(p.slug));
+  libs.forEach(p => S.auto.add(p.slug));
+
+  const s1 = section(root, "ชุดเพิ่มความลื่น + Essential", "เลือกไว้ให้แล้ว", {actions: true});
+  main.forEach((p, i) => { card(s1, p, i); S.on.add(p.slug); });
+  const s2 = section(root, "ม็อดสามัญประจำบ้าน", "ยังไม่ได้เลือก เพิ่มได้ตามชอบ", {actions: true});
+  let k = 0;
+  for (const [gname, slugs] of data.groups) {
+    const items = slugs.filter(s => S.by[s]); if (!items.length) continue;
+    const sub = section(s2.body, gname, "", {sub: true}); s2.children.push(sub);
+    items.forEach(s => card(sub, S.by[s], k++));
+  }
+  if (libs.length) { const s3 = section(root, "ไลบรารีเสริม", "เลือกให้อัตโนมัติเมื่อม็อดที่ต้องใช้ถูกเลือก", {closed: true}); libs.forEach((p, i) => card(s3, p, i, {auto: true})); }
+  if (data.skipped.length) { const s4 = section(root, "รายการที่ข้ามไป", "มีอยู่แล้ว หรือใช้กับม็อดแพ็กนี้ไม่ได้", {closed: true});
+    data.skipped.forEach(([slug, why], i) => card(s4, null, i, {skip: true, slug, note: why})); }
+  if (!data.plan.length) root.append(Object.assign(el("div", "empty"), {innerHTML: "<h2>ครบแล้ว</h2>ม็อดแพ็กนี้มีม็อดในชุดครบแล้ว ไม่ต้องติดตั้งเพิ่ม"}));
+  refresh(); filter();
+}
+
+function filter() {
+  if (!S.data) return;
+  const q = $("#q").value.trim().toLowerCase();
+  const match = new Set();
+  for (const r of S.rows) { const ok = !q || r.text.includes(q); r.card.classList.toggle("hidden", !ok); if (ok) match.add(r.slug); }
+  for (const sec of S.sections) {
+    const hit = sec.rows().some(s => match.has(s));
+    sec.el.classList.toggle("hidden", !hit);
+    if (q && hit) sec.el.classList.remove("closed");
+  }
+}
+
+/* ---------------- actions ---------------- */
+async function check() {
+  const path = $("#path").value.trim();
+  if (!path) { toast("กรุณาเลือกโฟลเดอร์ม็อดแพ็กก่อน", "warn"); return; }
+  setBusy(true, "กำลังค้นหาไฟล์ที่ตรงกับเวอร์ชันเกมจาก Modrinth...");
+  const root = $("#list"); root.replaceChildren();
+  for (let i = 0; i < 6; i++) { const s = el("div", "skel"); s.style.animationDelay = i * 90 + "ms"; root.append(s); }
+  const res = await api().check(path);
+  setBusy(false);
+  if (res.error) { root.replaceChildren(); setStatus("ตรวจไม่สำเร็จ"); await modal("ตรวจไม่สำเร็จ", res.error, [["ตกลง", true, true]]); return; }
+  render(res);
+  setStatus(`พบ ${res.plan.length} ม็อดที่ติดตั้งได้`, `Minecraft ${res.info.mc} · ${res.info.loader}`);
+}
+
+async function install() {
+  const chosen = [...S.on];
+  if (!chosen.length) return;
+  const ok = await modal(`ติดตั้ง ${chosen.length} ม็อด`, [el("div", null, `ปลายทาง: ${S.data.info.mods_dir}`), list(chosen.map(title)),
+    el("div", null, "อย่าลืมปิดเกมก่อนติดตั้ง")], [["ยกเลิก", false], ["เริ่มติดตั้ง", true, true]]);
+  if (!ok) return;
+  $("#log").textContent = ""; $("#log").classList.add("show");
+  setBusy(true, "กำลังดาวน์โหลดและติดตั้ง...");
+  const btn = $("#install"), old = btn.innerHTML; btn.replaceChildren(el("span", "spin"), document.createTextNode("กำลังติดตั้ง"));
+  const res = await api().install($("#path").value, chosen);
+  btn.innerHTML = old; setBusy(false);
+  if (res.error) { await modal("ติดตั้งไม่สำเร็จ", res.error, [["ตกลง", true, true]]); return; }
+  window.onLog(`ติดตั้งเสร็จ ${res.added} ไฟล์ (รายการ ${when(res.tag)})`);
+  await modal("ติดตั้งเสร็จแล้ว 🎉", `ติดตั้งแล้ว ${res.added} ม็อด เปิดเกมได้เลย\n\nถ้าเกมมีปัญหา กด "ย้อนการติดตั้ง" แล้วเลือกรายการ ${when(res.tag)}`, [["ตกลง", true, true]]);
+  check();
+}
+
+async function restore() {
+  const path = $("#path").value;
+  const items = await api().installs(path);
+  if (!items.length) { toast("ยังไม่เคยติดตั้งม็อดด้วยโปรแกรมนี้ในม็อดแพ็กนี้", "warn"); return; }
+  let picked = null; const ul = el("ul");
+  for (const it of items) {
+    const li = el("li", "pick", `${when(it.name)}  ·  ${it.files.length} ไฟล์`);
+    li.append(el("small", null, it.files.join(", ")));
+    li.onclick = () => { ul.querySelectorAll(".sel").forEach(x => x.classList.remove("sel")); li.classList.add("sel"); picked = it.name; };
+    ul.append(li);
+  }
+  const go = await modal("ย้อนการติดตั้ง", [el("div", null, "เลือกรายการที่ต้องการย้อนกลับ โปรแกรมจะลบเฉพาะไฟล์ที่ตัวเองติดตั้งไว้ (ปิดเกมก่อน)"), ul],
+    [["ยกเลิก", false], ["ย้อนกลับ", true, true]]);
+  if (!go) return;
+  if (!picked) { toast("ยังไม่ได้เลือกรายการ", "warn"); return; }
+  $("#log").classList.add("show");
+  const res = await api().restore(path, picked);
+  if (res.error) { await modal("ย้อนกลับไม่สำเร็จ", res.error, [["ตกลง", true, true]]); return; }
+  toast(`ย้อนการติดตั้งรายการ ${when(picked)} แล้ว`); check();
+}
+
+$("#check").onclick = check;
+$("#path").addEventListener("keydown", e => { if (e.key === "Enter") check(); });
+$("#browse").onclick = async () => { const d = await api().browse(); if (d) { $("#path").value = d; check(); } };
+$("#install").onclick = install;
+$("#restore").onclick = restore;
+$("#logbtn").onclick = () => $("#log").classList.toggle("show");
+$("#friends").onclick = () => {
+  const pick = side => [...S.on].filter(s => S.by[s].side === side).map(title);
+  const both = pick("both"), host = pick("server"), own = [...S.on].filter(s => ["client", "either", "unknown"].includes(S.by[s].side)).map(title);
+  const body = [el("div", null, "เวลาเล่นด้วยกันผ่าน Essential เกมของคนเปิดโลกจะทำหน้าที่เป็นเซิร์ฟเวอร์ ม็อดที่เลือกไว้แบ่งได้ดังนี้")];
+  const block = (head, items, note) => { if (!items.length) return; const h = el("div", null, head); h.style.cssText = "margin-top:14px;color:var(--text);font-weight:700";
+    body.push(h, el("div", null, note), list(items)); };
+  block("ทุกคนต้องลง", both, "ทั้งคนเปิดโลกและเพื่อนต้องมีม็อดเหล่านี้ ไม่อย่างนั้นจะเข้าโลกไม่ได้หรือใช้ฟีเจอร์ร่วมกันไม่ได้");
+  block("เฉพาะคนเปิดโลก", host, "ต้องอยู่ในเกมของคนเปิดโลก เพื่อนไม่ต้องลง");
+  block("ลงเฉพาะเครื่องตัวเองได้", own, "ช่วยเฉพาะเครื่องที่ลงไว้ เพื่อนจะลงตามหรือไม่ก็ได้");
+  modal("เพื่อนต้องลงอะไรบ้าง", body, [["ตกลง", true, true]]);
+};
+$("#q").addEventListener("input", filter);
+$("#modal").addEventListener("click", e => { if (e.target.id === "modal") $("#m-acts").firstChild && $("#m-acts").firstChild.click(); });
+
+/* ---------------- background picker ---------------- */
+let currentBg = null;
+function applyBg(bg) {
+  currentBg = bg || null;
+  const img = $("#custom-bg"), vid = $("#custom-video");
+  img.removeAttribute("src"); vid.pause(); vid.removeAttribute("src"); vid.style.display = "none";
+  $("#bg").classList.toggle("custom", !!bg);
+  if (!bg) return;
+  if (bg.kind === "video") { vid.src = bg.src; vid.style.display = "block"; vid.play().catch(() => {}); }
+  else img.src = bg.src;
+}
+function setDim(v) { document.documentElement.style.setProperty("--bgdim", v == null ? .6 : v); }
+
+$("#bgbtn").onclick = () => {
+  const panel = el("div", "bgpanel");
+  const now = el("div", "now");
+  const showNow = () => now.textContent = currentBg ? `ตอนนี้ใช้: ${currentBg.name}` : "ตอนนี้ใช้: พื้นหลังม่วงชมพูของโปรแกรม";
+  showNow();
+  const row = el("div", "row");
+  const pick = el("button", "btn primary", "เลือกรูปหรือวิดีโอ");
+  const reset = el("button", "btn", "ใช้พื้นหลังเริ่มต้น");
+  pick.onclick = async () => {
+    pick.disabled = true;
+    const res = await api().pick_background();
+    pick.disabled = false;
+    if (!res) return;
+    if (res.error) { toast(res.error, "warn"); return; }
+    applyBg(res.bg); showNow(); toast("✓ เปลี่ยนพื้นหลังแล้ว");
+  };
+  reset.onclick = async () => { const res = await api().reset_background(); applyBg(res.bg); showNow(); toast("กลับไปใช้พื้นหลังเริ่มต้นแล้ว"); };
+  row.append(pick, reset);
+  const lab = el("label", null, "ความมืดของพื้นหลัง (ช่วยให้อ่านตัวหนังสือง่ายขึ้น)");
+  const range = Object.assign(document.createElement("input"), {type: "range", min: 0, max: .9, step: .05});
+  range.value = getComputedStyle(document.documentElement).getPropertyValue("--bgdim").trim() || .6;
+  range.oninput = () => setDim(range.value);
+  range.onchange = () => api().set_dim(range.value);
+  lab.append(range);
+  panel.append(now, row, lab, el("div", "note", "ใช้ได้ทั้ง GIF, WebP, PNG, JPG, MP4 และ WebM ขนาดไม่เกิน 40 MB · ปิดโปรแกรมแล้วยังจำไว้ให้"));
+  modal("เปลี่ยนพื้นหลัง", panel, [["เสร็จ", true, true]]);
+};
+
+window.addEventListener("pywebviewready", async () => {
+  const init = await api().init();
+  if (init.path) $("#path").value = init.path;
+  setDim(init.dim);
+  applyBg(init.bg);
+  if (init.auto) check();
+});
+</script>
+</body>
+</html>

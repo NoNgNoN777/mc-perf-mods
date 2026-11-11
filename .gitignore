@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+# your own window background (README: "เปลี่ยนพื้นหลังเป็นรูปของตัวเอง") - remove these lines to share it
+bg.gif
+bg.webp
+bg.png
+bg.jpg
+bg.jpeg
+bg.mp4
+bg.webm
+build/
+dist/
