@@ -7,7 +7,9 @@ description: Add the standard performance and visual mods (Sodium/Embeddium, Lit
 
 Tool: `scripts/perf.py` (Python 3.8+, standard library only, uses the public Modrinth API - no key).
 It only ADDS jars to `mods/`; it never replaces or deletes a mod it did not add. Every install is
-recorded in `<instance>/.mc-perf-mods/<time>.json`, and `restore` removes exactly those files.
+recorded in `<instance>/.mc-perf-mods/<time>.json`, and `restore` removes exactly those files - only while each still matches its recorded sha1.
+Files changed since install (or records without a hash, or paths outside the instance) are kept, reported,
+and stay in the record so `restore` can be run again after the user deals with them.
 
 Talk to the user in Thai.
 

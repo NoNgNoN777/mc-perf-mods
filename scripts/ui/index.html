@@ -576,6 +576,10 @@ async function restore() {
   $("#log").classList.add("show");
   const res = await api().restore(path, picked);
   if (res.error) { await modal("ย้อนกลับไม่สำเร็จ", res.error, [["ตกลง", true, true]]); return; }
+  if (res.kept && res.kept.length) {
+    await modal("ย้อนกลับได้บางส่วน", `ไม่ได้ลบ ${res.kept.length} ไฟล์ เพราะถูกเปลี่ยนหลังติดตั้งหรือตรวจไม่ได้ว่าเป็นไฟล์เดิม:\n${res.kept.join("\n")}\n\nรายการยังอยู่ ย้อนซ้ำได้หลังจัดการไฟล์แล้ว`, [["ตกลง", true, true]]);
+    check(); return;
+  }
   toast(`ย้อนการติดตั้งรายการ ${when(picked)} แล้ว`); check();
 }
 

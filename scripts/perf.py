@@ -8,7 +8,7 @@ to any Minecraft instance, picking the right files for its loader and version fr
     python perf.py list    --instance <dir>                          (installs made by this tool)
 
 Python 3.8+, standard library only. Only adds files to mods/ - never replaces or deletes a mod
-it did not add itself.
+it did not add itself. restore deletes a file only while its sha1 still matches the install record.
 """
 import argparse
 import datetime
@@ -536,7 +536,12 @@ def cmd_install(a):
 def install_plan(info, plan, instance, log=print):
     """Download every entry of plan into mods/, verify sha1, record the install. -> (tag, added)"""
     os.makedirs(info["mods_dir"], exist_ok=True)
-    tag = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    sd = os.path.join(instance, STATE_DIR)
+    tag = base = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    n = 1
+    while any(os.path.exists(os.path.join(sd, tag + ext)) for ext in (".json", ".json.restored")):
+        n += 1                           # two installs in the same second must not share a record
+        tag = "%s-%d" % (base, n)
     added = []
     for p in plan:
         dst = os.path.join(info["mods_dir"], p["file"])
@@ -550,25 +555,77 @@ def install_plan(info, plan, instance, log=print):
         with open(dst + ".tmp", "wb") as f:
             f.write(data)
         os.replace(dst + ".tmp", dst)
-        added.append(dict(p, path=os.path.relpath(dst, instance)))
+        # sha1 of the bytes actually written: restore deletes the file only if it still matches
+        added.append(dict(p, path=os.path.relpath(dst, instance), sha1=hashlib.sha1(data).hexdigest()))
         log("  ลงแล้ว: %s" % p["file"])
         # record after every file, so a crash half way still leaves a restorable list
-        sd = os.path.join(instance, STATE_DIR)
         os.makedirs(sd, exist_ok=True)
-        json.dump({"time": tag, "mc": info["mc"], "loader": info["loader"], "added": added},
-                  open(os.path.join(sd, tag + ".json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        _write_state(os.path.join(sd, tag + ".json"),
+                     {"time": tag, "mc": info["mc"], "loader": info["loader"], "added": added})
     return tag, added
 
 
+def _write_state(path, data):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def _sha1_file(path):
+    h = hashlib.sha1()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _inside(root, path):
+    """True if path resolves to somewhere strictly inside root (follows links, .. and drive letters)."""
+    root, path = os.path.realpath(root), os.path.realpath(path)
+    try:
+        return path != root and os.path.commonpath([root, path]) == root
+    except ValueError:                   # different drives on Windows
+        return False
+
+
 def restore_install(instance, name, log=print):
+    """Undo one install: delete each file it added, but only while the file is still byte-identical
+    to what was installed. Files changed since then, records without a hash, and paths that resolve
+    outside the instance are kept and stay in the record, so the user can sort them out and run
+    restore again. -> {"removed": [...], "missing": [...], "kept": [...]} (paths)"""
     f = os.path.join(instance, STATE_DIR, name + ".json")
-    d = json.load(open(f, encoding="utf-8"))
+    with open(f, encoding="utf-8") as fh:
+        d = json.load(fh)
+    removed, missing, kept = [], [], []
     for x in d["added"]:
-        p = os.path.join(instance, x["path"])
-        if os.path.exists(p):
+        rel = x.get("path") or ""
+        p = os.path.join(instance, rel)
+        want = (x.get("sha1") or "").lower()
+        if not rel or os.path.isabs(rel) or not _inside(instance, p):
+            log("ข้าม %s: อยู่นอกโฟลเดอร์ม็อดแพ็ก ไม่ลบ" % rel)
+        elif not os.path.lexists(p):
+            missing.append(rel)
+            log("ไม่พบ %s (ถูกลบไปแล้ว)" % rel)
+            continue
+        elif not os.path.isfile(p):
+            log("ข้าม %s: ไม่ใช่ไฟล์ปกติ ไม่ลบ" % rel)
+        elif not want:
+            log("ข้าม %s: ประวัตินี้ไม่มี hash ให้ตรวจว่าเป็นไฟล์เดิม ลบเองถ้าแน่ใจ" % rel)
+        elif _sha1_file(p) != want:
+            log("ข้าม %s: ไฟล์ถูกเปลี่ยนหลังติดตั้ง ไม่ลบ" % rel)
+        else:
             os.remove(p)
-            log("ลบ %s" % x["path"])
-    os.rename(f, f + ".restored")
+            removed.append(rel)
+            log("ลบ %s" % rel)
+            continue
+        kept.append(x)
+    if kept:                             # keep what is left so restore can be run again
+        d["added"] = kept
+        _write_state(f, d)
+    else:
+        os.replace(f, f + ".restored")
+    return {"removed": removed, "missing": missing, "kept": [x.get("path") for x in kept]}
 
 
 def cmd_versions(a):
@@ -612,14 +669,11 @@ def cmd_restore(a):
         files = [f for f in files if os.path.basename(f)[:-5] == a.install]
     if not files:
         sys.exit("ไม่พบประวัติการลงของเครื่องมือนี้")
+    kept = []
     for f in reversed(files):
-        d = json.load(open(f, encoding="utf-8"))
-        for x in d["added"]:
-            p = os.path.join(a.instance, x["path"])
-            if os.path.exists(p):
-                os.remove(p)
-                print("ลบ %s" % x["path"])
-        os.rename(f, f + ".restored")
+        kept += restore_install(a.instance, os.path.basename(f)[:-5], print)["kept"]
+    if kept:
+        sys.exit("ย้อนกลับได้บางส่วน: ไม่ได้ลบ %d ไฟล์ข้างบน (ยังอยู่ในประวัติ จัดการแล้วสั่ง restore ซ้ำได้)" % len(kept))
     print("ย้อนกลับเรียบร้อย")
 
 

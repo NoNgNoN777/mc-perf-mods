@@ -215,10 +215,10 @@ class Api:
 
     def restore(self, path, name):
         try:
-            perf.restore_install(self._clean(path), name, self._log)
+            r = perf.restore_install(self._clean(path), name, self._log)
         except Exception as ex:
             return {"error": str(ex)}
-        return {"ok": True}
+        return {"ok": not r["kept"], "kept": r["kept"], "removed": len(r["removed"])}
 
     def open_url(self, url):
         if isinstance(url, str) and url.startswith("https://"):

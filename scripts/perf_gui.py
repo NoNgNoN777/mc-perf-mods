@@ -728,8 +728,12 @@ class App(tk.Tk):
                 return
             name = names[sel[0]]
             if messagebox.askyesno("ยืนยัน", "ย้อนการติดตั้งรายการ %s ใช่ไหม? (ปิดเกมก่อน)" % name, parent=win):
-                perf.restore_install(inst, name, self.write)
-                self.write("ย้อนการติดตั้งรายการ %s แล้ว" % name)
+                kept = perf.restore_install(inst, name, self.write)["kept"]
+                if kept:
+                    self.write("ย้อนรายการ %s ได้บางส่วน: ไม่ได้ลบ %d ไฟล์ข้างบน (ยังอยู่ในรายการ ย้อนซ้ำได้)"
+                               % (name, len(kept)))
+                else:
+                    self.write("ย้อนการติดตั้งรายการ %s แล้ว" % name)
                 win.destroy()
                 self.check()
         self.button(win, "ย้อนกลับ", go).pack(pady=12)
