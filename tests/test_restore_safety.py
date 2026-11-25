@@ -36,7 +36,7 @@ class RestoreSafety(unittest.TestCase):
     def setUp(self):
         self.perf = load_perf()
         self.tmp = tempfile.mkdtemp()
-        self.inst = os.path.join(self.tmp, "instance")
+        self.inst = os.path.join(self.tmp, "instance [forge]")
         self.mods = os.path.join(self.inst, "mods")
         os.makedirs(self.mods)
         self.sd = os.path.join(self.inst, self.perf.STATE_DIR)
@@ -72,7 +72,32 @@ class RestoreSafety(unittest.TestCase):
                 return False
 
     def records(self):
-        return sorted(os.listdir(self.sd))
+        return sorted(f for f in os.listdir(self.sd) if f != ".lock")
+
+    def test_hash_catalog_and_mod_ids_in_bracketed_instance(self):
+        import zipfile
+        with zipfile.ZipFile(os.path.join(self.mods, "user.jar"), "w") as z:
+            z.writestr("fabric.mod.json", '{"id":"local_mod"}')
+        self.assertEqual(self.perf.installed_mod_ids(self.mods)[0], {"local_mod": "user.jar"})
+        with mock.patch.object(self.perf, "api_post", return_value={}) as lookup:
+            self.perf.installed_projects(self.mods)
+        self.assertEqual(len(lookup.call_args[0][1]["hashes"]), 1)
+
+    def test_history_failure_leaves_no_unrecorded_jar(self):
+        info = {"mc": "1.20.1", "loader": "fabric", "mods_dir": self.mods}
+        plan = [{"slug": "a", "file": "a.jar", "url": "https://example.invalid/a", "sha1": None}]
+        with mock.patch.object(self.perf, "_write_state", side_effect=OSError("disk full")), \
+                mock.patch.object(self.perf.urllib.request, "urlopen", return_value=io.BytesIO(b"A")):
+            with self.assertRaises(OSError):
+                self.perf.install_plan(info, plan, self.inst)
+        self.assertEqual(os.listdir(self.mods), [])
+
+    def test_concurrent_writer_is_excluded_and_lock_releases(self):
+        with self.perf._lock_history(self.sd):
+            with self.assertRaises(RuntimeError):
+                self.perf.install_plan({"mods_dir": self.mods}, [], self.inst)
+        with self.perf._lock_history(self.sd):
+            self.assertEqual(self.perf.installs(self.inst), [])
 
     def test_unchanged_file_is_removed(self):
         p = self.jar("a.jar", b"AAA")

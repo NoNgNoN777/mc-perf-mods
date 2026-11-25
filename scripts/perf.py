@@ -11,6 +11,7 @@ Python 3.8+, standard library only. Only adds files to mods/ - never replaces or
 it did not add itself. restore deletes a file only while its sha1 still matches the install record.
 """
 import argparse
+from contextlib import contextmanager
 import datetime
 import glob
 import hashlib
@@ -19,6 +20,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import urllib.parse
 import urllib.request
 import zipfile
@@ -148,14 +150,17 @@ def detect(inst):
     info = {"mc": None, "loader": None, "mods_dir": None}
     p = os.path.join(inst, "minecraftinstance.json")                     # CurseForge
     if os.path.exists(p):
-        d = json.load(open(p, encoding="utf-8-sig"))
+        with open(p, encoding="utf-8-sig") as fh:
+            d = json.load(fh)
         info["mc"] = d.get("gameVersion")
         name = ((d.get("baseModLoader") or {}).get("name") or "").lower()
         info["loader"] = next((l for l in ("neoforge", "forge", "fabric", "quilt") if name.startswith(l)), None)
         info["mods_dir"] = os.path.join(inst, "mods")
     p = os.path.join(inst, "mmc-pack.json")                              # Prism / MultiMC
     if os.path.exists(p) and not info["mc"]:
-        for c in json.load(open(p, encoding="utf-8-sig")).get("components", []):
+        with open(p, encoding="utf-8-sig") as fh:
+            components = json.load(fh).get("components", [])
+        for c in components:
             uid = c.get("uid", "")
             if uid == "net.minecraft":
                 info["mc"] = c.get("version")
@@ -163,9 +168,14 @@ def detect(inst):
                            ("net.fabricmc.fabric-loader", "fabric"), ("org.quiltmc.quilt-loader", "quilt")):
                 if uid == key:
                     info["loader"] = l
-        for sub in (".minecraft", "minecraft"):
-            if os.path.isdir(os.path.join(inst, sub)):
-                info["mods_dir"] = os.path.join(inst, sub, "mods")
+        game_root = os.path.join(inst, "minecraft")
+        legacy_root = os.path.join(inst, ".minecraft")
+        if not os.path.isdir(game_root):
+            if os.path.isdir(legacy_root):
+                game_root = legacy_root
+            elif os.path.isdir(os.path.join(inst, "mods")):
+                game_root = inst
+        info["mods_dir"] = os.path.join(game_root, "mods")
     if info["mods_dir"] is None and os.path.isdir(os.path.join(inst, "mods")):
         info["mods_dir"] = os.path.join(inst, "mods")
     return info
@@ -202,7 +212,7 @@ def forge_mod_ids(data):
 def installed_mod_ids(mods_dir):
     """mod ids of every jar in mods/ (fabric.mod.json, quilt.mod.json, mods.toml, neoforge.mods.toml)"""
     ids, optifine = {}, False
-    for jar in glob.glob(os.path.join(mods_dir, "*.jar")):
+    for jar in glob.glob(os.path.join(glob.escape(mods_dir), "*.jar")):
         if "optifine" in os.path.basename(jar).lower():
             optifine = True
         try:
@@ -270,9 +280,9 @@ def installed_projects(mods_dir):
     """Ask Modrinth which projects the jars in mods/ are (by sha1).
     -> {project_id: {"file": jar, "incompatible": [project ids its version declares]}}"""
     hashes = {}
-    for jar in glob.glob(os.path.join(mods_dir, "*.jar")):
+    for jar in glob.glob(os.path.join(glob.escape(mods_dir), "*.jar")):
         try:
-            hashes[hashlib.sha1(open(jar, "rb").read()).hexdigest()] = os.path.basename(jar)
+            hashes[_sha1_file(jar)] = os.path.basename(jar)
         except OSError:
             pass
     if not hashes:
@@ -282,8 +292,12 @@ def installed_projects(mods_dir):
     except Exception:
         return {}
     out = {}
+    version_projects = {}
     for h, v in found.items():
+        required = _required_projects(v.get("dependencies", []), version_projects)
         out[v["project_id"]] = {"file": hashes.get(h, "?"), "version_id": v["id"],
+                                "pins": {d["project_id"]: d["version_id"] for d in required
+                                         if d.get("project_id") and d.get("version_id")},
                                 "incompatible": [d["project_id"] for d in v.get("dependencies", [])
                                                  if d.get("dependency_type") == "incompatible" and d.get("project_id")]}
     return out
@@ -291,6 +305,23 @@ def installed_projects(mods_dir):
 
 def vtuple(v):
     return tuple(int(x) for x in re.findall(r"\d+", v or "")[:3])
+
+
+def _required_projects(dependencies, version_projects):
+    required = []
+    for dep in dependencies:
+        if dep.get("dependency_type") != "required":
+            continue
+        version_id = dep.get("version_id")
+        if version_id and not dep.get("project_id"):
+            if version_id not in version_projects:
+                try:
+                    version_projects[version_id] = api("/version/" + version_id)["project_id"]
+                except (OSError, ValueError, KeyError):
+                    version_projects[version_id] = None
+            dep = dict(dep, project_id=version_projects[version_id])
+        required.append(dep)
+    return required
 
 
 def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
@@ -312,7 +343,22 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
 
     info_by = {}
     present = set()
-    dependency_pins = {}
+    installed_pins = {}
+    for installed in have_proj.values():
+        for project_id, version_id in installed.get("pins", {}).items():
+            installed_pins.setdefault(project_id, set()).add(version_id)
+    fixed_pins = {i: next(iter(pins)) for i, pins in installed_pins.items() if len(pins) == 1}
+    dependency_pins = fixed_pins.copy()
+    attempted_pins = {}
+    version_projects = {}
+    pin_versions = {}
+
+    def select_version(slug):
+        pin = dependency_pins.get(info_by[slug]["id"])
+        if pin in pin_versions:
+            return pin_versions[pin]
+        return _safe_version(slug, loader, mc, pin)
+
     seen, queue = set(), list(want)
     while queue:
         batch = [s for s in dict.fromkeys(queue) if s not in seen]
@@ -339,10 +385,14 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
                 skipped.append((slug, "มีอยู่แล้ว: %s" % already))
             elif not pj:
                 skipped.append((slug, "ไม่พบใน Modrinth"))
+            elif len(installed_pins.get(pj["id"], ())) > 1:
+                skipped.append((slug, "ม็อดที่ติดตั้งอยู่ต้องการคนละเวอร์ชัน"))
             else:
                 todo.append(slug)
+        for slug in todo:
+            attempted_pins.setdefault(slug, set()).add(dependency_pins.get(info_by[slug]["id"]))
         with ThreadPoolExecutor(max_workers=8) as ex:
-            versions = dict(zip(todo, ex.map(lambda s: _safe_version(s, loader, mc, dependency_pins.get(info_by[s]["id"])), todo)))
+            versions = dict(zip(todo, ex.map(select_version, todo)))
         dep_ids = []
         for slug in todo:
             v = versions[slug]
@@ -355,13 +405,11 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
             pj = info_by[slug]
             f = next((x for x in v["files"] if x.get("primary")), v["files"][0])
             deps = v.get("dependencies", [])
-            required = [d for d in deps if d.get("dependency_type") == "required"]
+            required = _required_projects(deps, version_projects)
             if any(not d.get("project_id") for d in required):
                 skipped.append((slug, "ตรวจสอบโครงการของม็อดที่ต้องใช้ไม่ได้"))
                 continue
             pins = {d["project_id"]: d["version_id"] for d in required if d.get("version_id")}
-            for project_id, version_id in pins.items():
-                dependency_pins.setdefault(project_id, version_id)
             plan.append({
                 "slug": slug, "id": pj["id"], "title": pj.get("title") or slug, "icon_url": pj.get("icon_url"),
                 "page": "https://modrinth.com/%s/%s" % (pj.get("project_type") or "mod", pj["slug"]),
@@ -387,16 +435,52 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
                     info_by[dep_info[i]["slug"]] = dep_info[i]
                     if dep_info[i]["slug"] not in seen:
                         queue.append(dep_info[i]["slug"])
+        # A dependency can also be a requested mod selected earlier in the same batch.
+        # Re-read the pinned release and its own dependencies before final validation.
+        dependency_pins = fixed_pins.copy()
+        selected_versions = {p["id"]: p["version_id"] for p in plan}
+        project_slugs = {pj["id"]: pj["slug"] for pj in info_by.values()}
+        for p in plan:
+            for project_id, pin in p["pins"].items():
+                if project_id in dependency_pins or project_id in have_proj:
+                    continue
+                if selected_versions.get(project_id) != pin:
+                    if pin not in pin_versions:
+                        pin_versions[pin] = _safe_version(project_slugs.get(project_id, project_id), loader, mc, pin)
+                    if not isinstance(pin_versions[pin], dict):
+                        continue
+                dependency_pins[project_id] = pin
+        for p in plan[:]:
+            pin = dependency_pins.get(p["id"])
+            if pin and pin != p["version_id"] and pin not in attempted_pins[p["slug"]]:
+                plan.remove(p)
+                seen.discard(p["slug"])
+                queue.append(p["slug"])
     id_to_slug = {pj["id"]: s for s, pj in info_by.items()}
     available_versions = {i: installed.get("version_id") for i, installed in have_proj.items()}
     available_versions.update({p["id"]: p["version_id"] for p in plan})
     for p in plan:
         p["requires"] = [id_to_slug.get(i, i) for i in p.pop("requires_ids")]
     compatible = []
+    pinned_exactly = {pin for p in plan for pin in p["pins"].values()}
     for p in plan:
         mismatches = [id_to_slug.get(i, i) + " (" + pin + ")" for i, pin in p.pop("pins").items()
                       if available_versions.get(i) != pin]
         if mismatches:
+            # The newest release can pin a dependency that another mod pins differently (Iris 1.7.6 and Indium
+            # 1.0.36 on Fabric 1.20.1 pin two Sodium builds). An older release may not pin it at all: use that.
+            older = None if p["version_id"] in pinned_exactly else _fallback_version(p["slug"], loader, mc, p["version_id"], available_versions, version_projects)
+            if older:
+                v, required = older
+                f = next((x for x in v["files"] if x.get("primary")), v["files"][0])
+                p.update({"version": v["version_number"], "type": v.get("version_type"), "version_id": v["id"],
+                          "file": f["filename"], "url": f["url"], "sha1": f["hashes"].get("sha1"),
+                          "requires": [id_to_slug.get(d["project_id"], d["project_id"]) for d in required],
+                          "incompatible": [d["project_id"] for d in v.get("dependencies", [])
+                                           if d.get("dependency_type") == "incompatible" and d.get("project_id")]})
+                available_versions[p["id"]] = v["id"]
+                compatible.append(p)
+                continue
             skipped.append((p["slug"], "ต้องใช้รุ่นที่ระบุบน Modrinth: %s" % ", ".join(mismatches)))
         else:
             compatible.append(p)
@@ -495,6 +579,24 @@ def set_sides(plan):
                 p["side"] = max(needers, key=SIDE_RANK.get)
 
 
+def _fallback_version(slug, loader, mc, current_id, available, version_projects):
+    """Newest other version of slug whose required projects are all in the plan (or installed) and whose
+    version pins match what is there. -> (version, required deps) or None."""
+    try:
+        vs = [v for v in api("/project/%s/version" % slug, loaders=[loader], game_versions=[mc]) if isinstance(v, dict)]
+    except Exception:
+        return None
+    rel = [v for v in vs if v.get("version_type") == "release"]
+    for v in sorted(rel or vs, key=lambda v: v["date_published"], reverse=True):
+        if v["id"] == current_id:
+            continue
+        required = _required_projects(v.get("dependencies", []), version_projects)
+        if all(d.get("project_id") in available and (not d.get("version_id") or available[d["project_id"]] == d["version_id"])
+               for d in required):
+            return v, required
+    return None
+
+
 def _safe_version(slug, loader, mc, pinned=None):
     try:
         if pinned:
@@ -589,10 +691,34 @@ def cmd_install(a):
           % (len(added), STATE_DIR, tag, tag))
 
 
+@contextmanager
+def _lock_history(state_dir):
+    # The OS releases this lock on exit, including after a crash. Keep the lock
+    # file so concurrent callers always lock the same file on POSIX as well.
+    with open(os.path.join(state_dir, ".lock"), "a+b") as lock:
+        lock.seek(0)
+        try:
+            if os.name == "nt":
+                import msvcrt
+                msvcrt.locking(lock.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as err:
+            raise RuntimeError("เปิดประวัติไม่ได้ อาจมีการติดตั้งหรือย้อนการติดตั้งที่กำลังทำงานอยู่") from err
+        yield
+
+
 def install_plan(info, plan, instance, log=print):
     """Download every entry of plan into mods/, verify sha1, record the install. -> (tag, added)"""
-    os.makedirs(info["mods_dir"], exist_ok=True)
     sd = os.path.join(instance, STATE_DIR)
+    os.makedirs(sd, exist_ok=True)
+    with _lock_history(sd):
+        return _install_locked(info, plan, instance, sd, log)
+
+
+def _install_locked(info, plan, instance, sd, log):
+    os.makedirs(info["mods_dir"], exist_ok=True)
     tag = base = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     n = 1
     while any(os.path.exists(os.path.join(sd, tag + ext)) for ext in (".json", ".json.restored")):
@@ -608,16 +734,24 @@ def install_plan(info, plan, instance, log=print):
             data = r.read()
         if p["sha1"] and hashlib.sha1(data).hexdigest() != p["sha1"]:
             raise RuntimeError("ไฟล์ %s เสีย (hash ไม่ตรง) - หยุด ไม่ได้ลงไฟล์นี้" % p["file"])
-        with open(dst + ".tmp", "wb") as f:
-            f.write(data)
-        os.replace(dst + ".tmp", dst)
-        # sha1 of the bytes actually written: restore deletes the file only if it still matches
-        added.append(dict(p, path=os.path.relpath(dst, instance), sha1=hashlib.sha1(data).hexdigest()))
+        staged = tempfile.NamedTemporaryFile(dir=info["mods_dir"], suffix=".tmp", delete=False)
+        tmp = staged.name
+        try:
+            with staged:
+                staged.write(data)
+            if os.path.lexists(dst):
+                log("  มีไฟล์ชื่อนี้อยู่แล้ว ข้าม: %s" % p["file"])
+                continue
+            # Record intent before publishing the JAR. Restore tolerates a
+            # missing file if installation stops between the two replacements.
+            added.append(dict(p, path=os.path.relpath(dst, instance), sha1=hashlib.sha1(data).hexdigest()))
+            _write_state(os.path.join(sd, tag + ".json"),
+                         {"time": tag, "mc": info["mc"], "loader": info["loader"], "added": added})
+            os.replace(tmp, dst)
+        finally:
+            if os.path.exists(tmp):
+                os.remove(tmp)
         log("  ลงแล้ว: %s" % p["file"])
-        # record after every file, so a crash half way still leaves a restorable list
-        os.makedirs(sd, exist_ok=True)
-        _write_state(os.path.join(sd, tag + ".json"),
-                     {"time": tag, "mc": info["mc"], "loader": info["loader"], "added": added})
     return tag, added
 
 
@@ -650,7 +784,12 @@ def restore_install(instance, name, log=print):
     to what was installed. Files changed since then, records without a hash, and paths that resolve
     outside the instance are kept and stay in the record, so the user can sort them out and run
     restore again. -> {"removed": [...], "missing": [...], "kept": [...]} (paths)"""
-    f = os.path.join(instance, STATE_DIR, name + ".json")
+    state_dir = os.path.join(instance, STATE_DIR)
+    with _lock_history(state_dir):
+        return _restore_locked(instance, os.path.join(state_dir, name + ".json"), log)
+
+
+def _restore_locked(instance, f, log):
     with open(f, encoding="utf-8") as fh:
         d = json.load(fh)
     removed, missing, kept = [], [], []
@@ -686,16 +825,14 @@ def restore_install(instance, name, log=print):
 
 def cmd_versions(a):
     """Count, per game version, how many mods of the loader's set have a file for it."""
-    count, total = {}, 0
+    count = {}
     for slug in SETS[a.loader]:
         try:
-            pv = api("/project/%s" % slug)
-        except Exception:
-            continue
-        if a.loader not in pv.get("loaders", []):
-            continue
-        total += 1
-        for gv in pv.get("game_versions", []):
+            versions = api("/project/%s/version" % slug, loaders=[a.loader])
+        except (OSError, ValueError) as exc:
+            sys.exit("อ่านรายการเวอร์ชันของ %s จาก Modrinth ไม่ได้: %s" % (slug, exc))
+        game_versions = {gv for v in versions if v.get("files") for gv in v["game_versions"]}
+        for gv in game_versions:
             if re.fullmatch(r"\d+(\.\d+)+", gv):
                 count.setdefault(gv, []).append(slug)
     def key(v):
@@ -705,11 +842,11 @@ def cmd_versions(a):
     for gv, slugs in rows:
         missing = [s for s in SETS[a.loader] if s not in slugs]
         print("  %-8s %2d/%d  %s" % (gv, len(slugs), len(SETS[a.loader]), ("ขาด: " + ", ".join(missing)) if missing else "ครบ"))
-    print("(นับจากรายการเวอร์ชันของแต่ละโปรเจกต์ - ตอนลงจริงยังเช็กไฟล์ทีละตัวอีกรอบ)")
+    print("(นับจากไฟล์ที่รองรับทั้ง loader และเวอร์ชันเกม ตอนลงจริงจะตรวจม็อดที่ต้องใช้คู่กันอีกครั้ง)")
 
 
 def installs(inst):
-    return sorted(glob.glob(os.path.join(inst, STATE_DIR, "*.json")))
+    return sorted(glob.glob(os.path.join(glob.escape(inst), STATE_DIR, "*.json")))
 
 
 def cmd_list(a):
