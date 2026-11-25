@@ -30,7 +30,7 @@ except Exception:
     pass
 
 API = "https://api.modrinth.com/v2"
-VERSION = "1.2"
+VERSION = "1.3"
 HEADERS = {"User-Agent": "NoNgNoN777/mc-perf-mods/" + VERSION + " (github.com/NoNgNoN777/mc-perf-mods)"}
 STATE_DIR = ".mc-perf-mods"
 
@@ -171,6 +171,34 @@ def detect(inst):
     return info
 
 
+def forge_mod_ids(data):
+    """Read IDs declared by [[mods]], excluding dependencies and other TOML tables."""
+    text = data.decode("utf-8-sig", "replace")
+    try:
+        import tomllib
+    except ImportError:  # Python 3.8-3.10
+        pass
+    else:
+        try:
+            return [mod["modId"] for mod in tomllib.loads(text).get("mods", [])
+                    if isinstance(mod, dict) and isinstance(mod.get("modId"), str)]
+        except (ValueError, TypeError):
+            pass
+    # Older runtimes and nonstandard manifests: inspect declarations only.
+    text = re.sub(r"""(?s)("{3}|'{3}).*?\1""", '""', text)
+    in_mods = False
+    ids = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("["):
+            in_mods = bool(re.fullmatch(r"\[\[\s*mods\s*\]\]\s*(?:#.*)?", line))
+        elif in_mods:
+            match = re.fullmatch(r"""modId\s*=\s*(["'])([\w.-]+)\1\s*(?:#.*)?""", line)
+            if match:
+                ids.append(match.group(2))
+    return ids
+
+
 def installed_mod_ids(mods_dir):
     """mod ids of every jar in mods/ (fabric.mod.json, quilt.mod.json, mods.toml, neoforge.mods.toml)"""
     ids, optifine = {}, False
@@ -192,7 +220,7 @@ def installed_mod_ids(mods_dir):
             pass
         for toml in ("META-INF/mods.toml", "META-INF/neoforge.mods.toml"):
             if toml in names:
-                found += re.findall(r'modId\s*=\s*"([^"]+)"', z.read(toml).decode("utf-8", "replace"))
+                found.extend(forge_mod_ids(z.read(toml)))
         if "optifine" in [f.lower() for f in found if f]:
             optifine = True
         for f in found:
@@ -255,7 +283,7 @@ def installed_projects(mods_dir):
         return {}
     out = {}
     for h, v in found.items():
-        out[v["project_id"]] = {"file": hashes.get(h, "?"),
+        out[v["project_id"]] = {"file": hashes.get(h, "?"), "version_id": v["id"],
                                 "incompatible": [d["project_id"] for d in v.get("dependencies", [])
                                                  if d.get("dependency_type") == "incompatible" and d.get("project_id")]}
     return out
@@ -281,9 +309,10 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
         want += [s for s in QOL if s not in want and s not in PREFER.get(loader, set())]
     if optifine:
         skipped.append(("render/shaders mods", "พบ OptiFine ในโฟลเดอร์ mods ซึ่งใช้ร่วมกับ Sodium/Embeddium/Iris/Oculus ไม่ได้"))
-        want = [s for s in want if MODS[s][0] not in ("render", "shaders", "settings")]
 
     info_by = {}
+    present = set()
+    dependency_pins = {}
     seen, queue = set(), list(want)
     while queue:
         batch = [s for s in dict.fromkeys(queue) if s not in seen]
@@ -297,19 +326,23 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
             continue
         todo = []
         for slug in batch:
+            if optifine and MODS.get(slug, (None,))[0] in ("render", "shaders", "settings"):
+                skipped.append((slug, "ใช้ร่วมกับ OptiFine ไม่ได้"))
+                continue
             pj = info_by.get(slug)
             ids = MODS.get(slug, (None, [slug]))[1]
             already = next((have[i] for i in ids if i in have), None)
             if not already and pj and pj["id"] in have_proj:
                 already = have_proj[pj["id"]]["file"]
             if already:
+                present.add(slug)
                 skipped.append((slug, "มีอยู่แล้ว: %s" % already))
             elif not pj:
                 skipped.append((slug, "ไม่พบใน Modrinth"))
             else:
                 todo.append(slug)
         with ThreadPoolExecutor(max_workers=8) as ex:
-            versions = dict(zip(todo, ex.map(lambda s: _safe_version(s, loader, mc), todo)))
+            versions = dict(zip(todo, ex.map(lambda s: _safe_version(s, loader, mc, dependency_pins.get(info_by[s]["id"])), todo)))
         dep_ids = []
         for slug in todo:
             v = versions[slug]
@@ -322,6 +355,13 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
             pj = info_by[slug]
             f = next((x for x in v["files"] if x.get("primary")), v["files"][0])
             deps = v.get("dependencies", [])
+            required = [d for d in deps if d.get("dependency_type") == "required"]
+            if any(not d.get("project_id") for d in required):
+                skipped.append((slug, "ตรวจสอบโครงการของม็อดที่ต้องใช้ไม่ได้"))
+                continue
+            pins = {d["project_id"]: d["version_id"] for d in required if d.get("version_id")}
+            for project_id, version_id in pins.items():
+                dependency_pins.setdefault(project_id, version_id)
             plan.append({
                 "slug": slug, "id": pj["id"], "title": pj.get("title") or slug, "icon_url": pj.get("icon_url"),
                 "page": "https://modrinth.com/%s/%s" % (pj.get("project_type") or "mod", pj["slug"]),
@@ -329,11 +369,12 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
                     {"page": 1, "pageSize": 20, "sortBy": "relevancy", "class": "mc-mods", "search": pj.get("title") or slug}),
                 "downloads": pj.get("downloads", 0),
                 "version": v["version_number"], "type": v.get("version_type"),
+                "version_id": v["id"], "pins": pins,
                 "file": f["filename"], "url": f["url"], "sha1": f["hashes"].get("sha1"),
                 "role": MODS.get(slug, ("dependency", []))[0],
                 "client_side": pj.get("client_side"), "server_side": pj.get("server_side"),
                 "incompatible": [d["project_id"] for d in deps if d.get("dependency_type") == "incompatible" and d.get("project_id")],
-                "requires_ids": [d["project_id"] for d in deps if d.get("dependency_type") == "required" and d.get("project_id")],
+                "requires_ids": [d["project_id"] for d in required],
             })
             dep_ids += plan[-1]["requires_ids"]
         if dep_ids:
@@ -347,8 +388,19 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
                     if dep_info[i]["slug"] not in seen:
                         queue.append(dep_info[i]["slug"])
     id_to_slug = {pj["id"]: s for s, pj in info_by.items()}
+    available_versions = {i: installed.get("version_id") for i, installed in have_proj.items()}
+    available_versions.update({p["id"]: p["version_id"] for p in plan})
     for p in plan:
         p["requires"] = [id_to_slug.get(i, i) for i in p.pop("requires_ids")]
+    compatible = []
+    for p in plan:
+        mismatches = [id_to_slug.get(i, i) + " (" + pin + ")" for i, pin in p.pop("pins").items()
+                      if available_versions.get(i) != pin]
+        if mismatches:
+            skipped.append((p["slug"], "ต้องใช้รุ่นที่ระบุบน Modrinth: %s" % ", ".join(mismatches)))
+        else:
+            compatible.append(p)
+    plan = compatible
 
     # optional = quality-of-life mods, and dependencies needed only by optional mods
     for p in plan:
@@ -382,7 +434,6 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
                     final.remove(p)
                     skipped.append((p["slug"], "ต้องใช้ Sinytra Connector (ตัวรันม็อด Fabric บน Forge) ซึ่งยังเป็นรุ่นทดลอง เสี่ยงเกมพัง"))
     # a mod whose requirement was dropped cannot be installed either; repeat until stable
-    present = {s for s, why in skipped if why.startswith("มีอยู่แล้ว")}
     while True:
         names = {p["slug"] for p in final}
         bad = [p for p in final if any(r not in names and r not in present for r in p["requires"])]
@@ -444,8 +495,13 @@ def set_sides(plan):
                 p["side"] = max(needers, key=SIDE_RANK.get)
 
 
-def _safe_version(slug, loader, mc):
+def _safe_version(slug, loader, mc, pinned=None):
     try:
+        if pinned:
+            version = api("/version/" + pinned)
+            if loader in version["loaders"] and mc in version["game_versions"]:
+                return version
+            return None
         return best_version(slug, loader, mc)
     except Exception as e:
         return e

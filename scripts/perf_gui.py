@@ -252,6 +252,7 @@ class App(tk.Tk):
         self.configure(bg=C["bg"])
         self.dark_titlebar()
         self.info, self.plan, self.rows, self.sections = None, [], [], []
+        self.checked_instance = None
         self.icon_imgs = []
         self.q = queue.Queue()          # worker threads never touch Tk: they queue callables
         self.after(100, self._poll)
@@ -423,6 +424,7 @@ class App(tk.Tk):
         if not os.path.isdir(inst):
             messagebox.showerror("ไม่พบโฟลเดอร์", "ไม่พบโฟลเดอร์นี้:\n%s" % inst)
             return
+        inst = os.path.abspath(inst)
         info = perf.detect(inst)
         if not info["mc"] or not info["loader"]:
             messagebox.showerror("ตรวจไม่สำเร็จ", "ไม่พบไฟล์ข้อมูลม็อดแพ็ก (minecraftinstance.json ของ CurseForge หรือ mmc-pack.json ของ Prism)\n"
@@ -432,6 +434,7 @@ class App(tk.Tk):
             messagebox.showerror("ยังไม่รองรับ", "ยังไม่รองรับ loader %s" % info["loader"])
             return
         self.info, self.plan = info, []
+        self.checked_instance = inst
         self.busy(True, "กำลังค้นหาไฟล์สำหรับ Minecraft %s (%s) จาก Modrinth..." % (info["mc"], info["loader"]))
         self.say("")
         for w in self.listbox.winfo_children():
@@ -662,6 +665,12 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------ install
     def install(self):
+        path = self.path.get().strip().strip('"')
+        inst = self.checked_instance
+        if not path or not inst or os.path.normcase(os.path.abspath(path)) != os.path.normcase(inst):
+            messagebox.showerror("โฟลเดอร์เปลี่ยนแล้ว", "กรุณาตรวจม็อดแพ็กในโฟลเดอร์ที่เลือกอีกครั้งก่อนติดตั้ง")
+            return
+        info = self.info
         chosen = [r.p for r in self.rows if r.p and r.var.get()]
         if not chosen:
             messagebox.showinfo("ยังไม่ได้เลือก", "ยังไม่ได้เลือกม็อดสักตัว")
@@ -682,14 +691,13 @@ class App(tk.Tk):
         if not messagebox.askyesno("ยืนยันการติดตั้ง", "ติดตั้ง %d ม็อด\nปลายทาง: %s\n\n%s\n\nปิดเกมแล้วใช่ไหม?"
                                    % (len(chosen), self.info["mods_dir"], names)):
             return
-        inst = self.path.get().strip().strip('"')
         self.busy(True, "กำลังดาวน์โหลดและติดตั้ง...")
         if not self.log.winfo_ismapped():
             self.toggle_log()
 
         def work():
             try:
-                tag, added = perf.install_plan(self.info, chosen, inst, self.write)
+                tag, added = perf.install_plan(info, chosen, inst, self.write)
                 self.write("ติดตั้งเสร็จ %d ไฟล์ (รายการ %s)" % (len(added), tag))
                 self.ui(lambda: (messagebox.showinfo("ติดตั้งเสร็จแล้ว", "ติดตั้งแล้ว %d ม็อด เปิดเกมได้เลย\n\n"
                                                     "ถ้าเกมมีปัญหา กด 'ย้อนการติดตั้ง' แล้วเลือกรายการ %s" % (len(added), tag)),
