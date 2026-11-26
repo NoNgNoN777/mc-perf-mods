@@ -462,7 +462,8 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
     for p in plan:
         p["requires"] = [id_to_slug.get(i, i) for i in p.pop("requires_ids")]
     compatible = []
-    pinned_exactly = {pin for p in plan for pin in p["pins"].values()}
+    pinned_exactly = set(fixed_pins.values()) | {pin for p in plan for pin in p["pins"].values()}
+    fallback_pins = {}
     for p in plan:
         mismatches = [id_to_slug.get(i, i) + " (" + pin + ")" for i, pin in p.pop("pins").items()
                       if available_versions.get(i) != pin]
@@ -479,12 +480,23 @@ def resolve(info, want_shaders=True, want_essential=True, want_qol=True):
                           "incompatible": [d["project_id"] for d in v.get("dependencies", [])
                                            if d.get("dependency_type") == "incompatible" and d.get("project_id")]})
                 available_versions[p["id"]] = v["id"]
+                fallback_pins[p["id"]] = {d["project_id"]: d["version_id"] for d in required if d.get("version_id")}
                 compatible.append(p)
                 continue
             skipped.append((p["slug"], "ต้องใช้รุ่นที่ระบุบน Modrinth: %s" % ", ".join(mismatches)))
         else:
             compatible.append(p)
-    plan = compatible
+    # A later fallback can replace the version an earlier fallback just checked.
+    plan = []
+    for p in compatible:
+        missing = [pin for i, pin in fallback_pins.get(p["id"], {}).items() if available_versions.get(i) != pin]
+        if missing:
+            skipped.append((p["slug"], "ต้องใช้รุ่นที่ระบุบน Modrinth: %s" % ", ".join(missing)))
+        else:
+            plan.append(p)
+
+    if loader in ("fabric", "quilt") and "sodium" in have:
+        plan = _check_installed_sodium(os.path.join(mods_dir, have["sodium"]), plan, skipped)
 
     # optional = quality-of-life mods, and dependencies needed only by optional mods
     for p in plan:
@@ -577,6 +589,64 @@ def set_sides(plan):
             needers = [q["side"] for q in plan if p["slug"] in q["requires"]]
             if needers:
                 p["side"] = max(needers, key=SIDE_RANK.get)
+
+
+def _matches_sodium(version, predicate):
+    """Fabric ORs array entries and ANDs space-separated constraints.
+    Only accept understood numeric ranges, or an exact version match."""
+    actual = version.split("+", 1)[0]
+    def numeric(value):
+        if not re.fullmatch(r"\d+(?:\.\d+){0,2}", value):
+            return None
+        parts = [int(x) for x in value.split(".")]
+        return tuple(parts + [0] * (3 - len(parts)))
+
+    def matches(token):
+        if token == "*" or actual == token.lstrip("=").split("+", 1)[0]:
+            return True
+        match = re.fullmatch(r"(>=|<=|>|<|~|=)?(\d+(?:\.\d+){0,2})", token)
+        current = numeric(actual)
+        if not match or current is None:
+            return False
+        op, lower = match.groups()
+        target = numeric(lower)
+        if op == "~":
+            return current >= target and current[:2] == target[:2]
+        return {None: current == target, "=": current == target, ">": current > target,
+                "<": current < target, ">=": current >= target, "<=": current <= target}[op]
+
+    alternatives = predicate if isinstance(predicate, list) else [predicate]
+    return any(isinstance(option, str) and option.strip() and all(matches(t) for t in option.split())
+               for option in alternatives)
+
+
+def _check_installed_sodium(jar, plan, skipped):
+    # Modrinth sometimes lists Sodium without the bounds enforced by Fabric
+    # (e.g. Iris 1.7.5). Read the actual selected add-on's metadata.
+    with zipfile.ZipFile(jar) as z:
+        manifest = json.loads(z.read("fabric.mod.json").decode("utf-8-sig"), strict=False) if "fabric.mod.json" in z.namelist() else {}
+    version = manifest.get("version") if manifest.get("id") == "sodium" else None
+    result = []
+    for p in plan:
+        if p["slug"] not in ("iris", "indium", "sodium-extra", "reeses-sodium-options") and "sodium" not in p["requires"]:
+            result.append(p)
+            continue
+        try:
+            with urllib.request.urlopen(urllib.request.Request(p["url"], headers=HEADERS), timeout=30) as response:
+                data = response.read()
+            if p["sha1"] and hashlib.sha1(data).hexdigest() != p["sha1"]:
+                raise ValueError("hash ไม่ตรง")
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                metadata = json.loads(archive.read("fabric.mod.json").decode("utf-8-sig"), strict=False)
+            required = metadata.get("depends", {}).get("sodium")
+            if required is not None and (not version or not _matches_sodium(version, required)):
+                skipped.append((p["slug"], "ต้องใช้ Sodium %s (ติดตั้ง %s)" % (required, version or "?")))
+                continue
+        except (OSError, KeyError, ValueError, zipfile.BadZipFile) as err:
+            skipped.append((p["slug"], "ตรวจเงื่อนไข Sodium ในไฟล์ม็อดไม่ได้: %s" % err))
+            continue
+        result.append(p)
+    return result
 
 
 def _fallback_version(slug, loader, mc, current_id, available, version_projects):

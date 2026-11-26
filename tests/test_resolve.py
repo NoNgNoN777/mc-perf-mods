@@ -28,6 +28,31 @@ def version(slug, pin=None):
 
 
 class Resolution(unittest.TestCase):
+    def test_candidate_jar_can_be_stricter_than_modrinth(self):
+        import io
+
+        def jar_bytes(metadata):
+            raw = io.BytesIO()
+            with zipfile.ZipFile(raw, "w") as archive:
+                archive.writestr("fabric.mod.json", json.dumps(metadata))
+            return raw.getvalue()
+
+        sodium = self.mods / "sodium.jar"
+        sodium.write_bytes(jar_bytes({"id": "sodium", "version": "0.5.3"}))
+        ranges = {"iris": ["0.5.10", "0.5.11"], "sodium-extra": ">=0.5.6", "indium": "0.5.3"}
+        plan = [{"slug": slug, "requires": ["sodium"], "url": "https://example.invalid/" + slug,
+                 "sha1": None} for slug in ranges]
+
+        def fetch(request, timeout):
+            slug = request.full_url.rsplit("/", 1)[1]
+            return io.BytesIO(jar_bytes({"depends": {"sodium": ranges[slug]}}))
+
+        skipped = []
+        with mock.patch.object(perf.urllib.request, "urlopen", fetch):
+            allowed = perf._check_installed_sodium(sodium, plan, skipped)
+        self.assertEqual([p["slug"] for p in allowed], ["indium"])
+        self.assertEqual(set(dict(skipped)), {"iris", "sodium-extra"})
+
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -89,6 +114,42 @@ class Resolution(unittest.TestCase):
         with zipfile.ZipFile(self.mods / "local.jar", "w") as archive:
             archive.writestr("fabric.mod.json", '{"id":"sodium"}')
         self.assertEqual(self.resolve(["indium"], pin="sodium-new")[0], [])
+
+    def test_fallback_respects_installed_and_transitive_pins(self):
+        def release(slug, vid, dep=None, pin=None):
+            v = dict(version(slug), id=vid, project_id=slug + "-project", version_number=vid,
+                     version_type="release", date_published="2025" if vid.endswith("new") else "2024",
+                     loaders=["fabric"], game_versions=["1.20.1"])
+            if dep:
+                v["dependencies"] = [{"dependency_type": "required", "project_id": dep + "-project",
+                                      "version_id": pin}]
+            return v
+
+        catalog = {
+            "engine": [release("engine", "engine-new", "base", "base-old"), release("engine", "engine-old")],
+            "addon": [release("addon", "addon-new", "base", "base-old"),
+                      release("addon", "addon-old", "engine", "engine-new")],
+            "ui": [release("ui", "ui-new", "addon")],
+        }
+        by_version = {v["id"]: v for versions in catalog.values() for v in versions}
+        base = {"file": "base.jar", "version_id": "base-new", "incompatible": []}
+        pinned = {"file": "existing.jar", "version_id": "existing-id", "incompatible": [],
+                  "pins": {"engine-project": "engine-new"}}
+        cases = [
+            (["engine"], {"base-project": base, "existing-project": pinned}, set()),
+            (["ui", "addon", "engine"], {"base-project": base}, {"engine-old"}),
+            (["engine", "addon", "ui"], {"base-project": base}, {"engine-old"}),
+        ]
+        for wanted, installed, expected in cases:
+            with self.subTest(wanted=wanted), mock.patch.dict(perf.SETS, fabric=wanted), \
+                    mock.patch.object(perf, "installed_projects", return_value=installed), \
+                    mock.patch.object(perf, "projects", side_effect=lambda keys: {
+                        k: project(k.split("-project")[0]) for k in keys}), \
+                    mock.patch.object(perf, "_safe_version", side_effect=lambda s, l, m, pin:
+                                      by_version.get(pin) if pin else catalog[s][0]), \
+                    mock.patch.object(perf, "api", side_effect=lambda path, **kw: catalog[path.split("/")[2]]):
+                plan, _ = perf.resolve(self.info, want_qol=False)
+                self.assertEqual({p["version_id"] for p in plan}, expected)
 
     def test_unavailable_optional_candidate_pin_keeps_the_shared_dependency(self):
         def release(slug, loader, mc, pin):
